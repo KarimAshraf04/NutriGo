@@ -1,4 +1,4 @@
-"""33 unit tests for the recommender, the Flutter API, the meal plan and the admin dashboard.  Run:  pytest -q  (from backend/)"""
+"""35 unit tests for the recommender, the Flutter API, the meal plan and the admin dashboard.  Run:  pytest -q  (from backend/)"""
 import io
 import os
 import shutil
@@ -481,3 +481,25 @@ def test_33_admin_sees_users_profile_photos_and_plan(admin):
     assert admin.get("/admin/api/stats").get_json()["accounts"]["total"] == 1
     assert admin.post(f"/admin/users/{user['id']}/delete", data={"csrf": admin.csrf}).status_code == 302
     assert admin.get(f"/admin/users/{user['id']}").status_code == 404
+
+
+def test_34_change_password_logs_out_other_devices(client):
+    h, user = sign_up(client)
+    other = {"Authorization": "Bearer " + client.post("/api/auth/login", json={
+        "email": OMAR["email"], "password": OMAR["password"]}).get_json()["token"]}
+    assert client.post("/api/me/password", json={"current_password": "wrong-one", "new_password": "newsecret1"},
+                       headers=h).status_code == 401
+    assert client.post("/api/me/password", json={"current_password": OMAR["password"], "new_password": "short"},
+                       headers=h).status_code == 400
+    r = client.post("/api/me/password", json={"current_password": OMAR["password"], "new_password": "newsecret1"},
+                    headers=h)
+    assert r.status_code == 200
+    assert client.get("/api/me", headers=other).status_code == 401  # old devices logged out
+    assert client.get("/api/me", headers={"Authorization": "Bearer " + r.get_json()["token"]}).status_code == 200
+    assert client.post("/api/auth/login", json={"email": OMAR["email"], "password": OMAR["password"]}).status_code == 401
+    assert client.post("/api/auth/login", json={"email": OMAR["email"], "password": "newsecret1"}).status_code == 200
+
+
+def test_35_links_use_https_behind_a_tunnel(client):
+    r = client.get("/api/foods?q=pizza", headers={"X-Forwarded-Proto": "https", "Host": "abc.ngrok-free.app"})
+    assert r.get_json()["foods"][0]["image_url"].startswith("https://abc.ngrok-free.app/api/images/pizza")

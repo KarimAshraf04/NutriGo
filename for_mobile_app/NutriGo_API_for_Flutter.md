@@ -13,10 +13,15 @@ Start the backend on the PC (`python app.py` in `backend/`). It listens on port 
 | Android emulator | `http://10.0.2.2:5000` |
 | iOS simulator, Windows desktop, Flutter web | `http://localhost:5000` |
 | Real phone (same Wi-Fi as the PC) | `http://<PC IP>:5000` — find the IP with `ipconfig` (IPv4 Address) |
+| Any phone, anywhere (ngrok tunnel) | the `https://….ngrok-free.app` address ngrok prints (changes on every ngrok start unless you claim a free static domain) |
 
 Android: add `<uses-permission android:name="android.permission.INTERNET"/>` and, because the API is
 plain HTTP, `android:usesCleartextTraffic="true"` on `<application>` in `AndroidManifest.xml`.
 On the PC, allow Python through Windows Firewall when asked, or a real phone cannot connect.
+
+With ngrok, every request must carry the header `ngrok-skip-browser-warning: true`, otherwise ngrok
+answers with an HTML warning page instead of JSON (`nutrigo_api.dart` sends it). ngrok URLs are https,
+so no cleartext setting is needed for them.
 
 Check the connection first: `GET /api/status` → `"model_ready": true`.
 
@@ -195,6 +200,7 @@ Tokens last 30 days; keep it with `flutter_secure_storage`, not plain shared pre
 | `POST /api/auth/register` `{name, email, password, sex?, age?, height_cm?, weight_kg?, activity?, goal?}` | new account → `{token, user}`, status `201`; `409` if the email exists; password ≥ 8 characters |
 | `POST /api/auth/login` `{email, password}` | → `{token, user}`; `401` "wrong email or password" |
 | `POST /api/auth/logout` | ends this token |
+| `POST /api/me/password` `{current_password, new_password}` | new password → `{token, user}`; every other device is logged out; `401` if the current password is wrong |
 | `GET /api/me` | the user (below) |
 | `PATCH /api/me` `{name?, sex?, age?, height_cm?, weight_kg?, activity?, goal?}` | update the profile → user; every new weight is kept as history |
 | `PUT /api/me/avatar` multipart `image` | profile photo → user |

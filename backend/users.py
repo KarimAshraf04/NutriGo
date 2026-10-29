@@ -139,6 +139,11 @@ class UserStore:
     def revoke(self, token):
         self.execute("DELETE FROM user_tokens WHERE token_hash = ?", (_token_hash(token),))
 
+    def set_password(self, uid, password):
+        """New password; every old login token stops working."""
+        self.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(password), uid))
+        self.execute("DELETE FROM user_tokens WHERE user_id = ?", (uid,))
+
     # ---------- photos ----------
 
     def user_dir(self, uid):

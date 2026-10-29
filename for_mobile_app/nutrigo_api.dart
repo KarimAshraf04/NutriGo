@@ -299,7 +299,11 @@ class NutriGoApi {
 
   /// Headers for private images: Image.network(photo.url, headers: api.authHeaders).
   Map<String, String> get authHeaders => _auth;
-  Map<String, String> get _auth => token == null ? {} : {'Authorization': 'Bearer $token'};
+  Map<String, String> get _auth => {
+        // free ngrok tunnels show a warning page instead of the API unless this header is sent
+        'ngrok-skip-browser-warning': 'true',
+        if (token != null) 'Authorization': 'Bearer $token',
+      };
   Map<String, String> get _jsonHeaders => {'Content-Type': 'application/json', ..._auth};
 
   /// e.g. 'http://10.0.2.2:5000' (emulator) or 'http://192.168.1.31:5000' (phone on Wi-Fi).
@@ -485,6 +489,17 @@ class NutriGoApi {
 
   Future<void> deletePhoto(int id) async {
     _decode(await _http.delete(_u('/api/me/photos/$id'), headers: _auth).timeout(timeout));
+  }
+
+  /// Change the password. Other devices are logged out; this client gets a new token.
+  /// Throws NutriGoException(401) if [currentPassword] is wrong.
+  Future<NutriGoUser> changePassword(String currentPassword, String newPassword) async {
+    final res = await _http
+        .post(_u('/api/me/password'),
+            headers: _jsonHeaders,
+            body: jsonEncode({'current_password': currentPassword, 'new_password': newPassword}))
+        .timeout(timeout);
+    return _signedIn(_decode(res));
   }
 
   /// Deletes the account, its meal plan and all its photos.

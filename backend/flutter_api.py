@@ -22,6 +22,7 @@
   POST   /api/auth/login      {email, password}             -> {token, user}
   POST   /api/auth/logout
   GET    /api/me   PATCH /api/me {profile fields}   DELETE /api/me (account + plan + photos)
+  POST   /api/me/password {current_password, new_password} -> new token (other devices logged out)
   PUT    /api/me/avatar  multipart 'image'     GET /api/me/avatar
   GET    /api/me/photos  -> meal-photo gallery; GET / DELETE /api/me/photos/<id>
   Signed-in users' meal photos (/api/predict, plan photo) are kept in their gallery; their plan is
@@ -648,6 +649,21 @@ def update_me():
         return bad
     state().users.update(user["id"], fields)
     return jsonify(profile_json(state().users.get(user["id"])))
+
+
+@bp.post("/me/password")
+def change_password():
+    user, bad = me_or_401()
+    if bad:
+        return bad
+    body = request.get_json(silent=True) or {}
+    if not state().users.check_password(user, str(body.get("current_password", ""))):
+        return error("current password is wrong", 401)
+    new = str(body.get("new_password", ""))
+    if len(new) < users.MIN_PASSWORD:
+        return error(f"'new_password' must be at least {users.MIN_PASSWORD} characters")
+    state().users.set_password(user["id"], new)  # logs out every device
+    return auth_json(user["id"])
 
 
 @bp.delete("/me")

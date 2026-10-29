@@ -25,7 +25,7 @@ Offline: Kaggle Food-101 → notebooks/train_resnet50_11class_final.ipynb (ResNe
 |---|---|
 | `data/` | `food101_nutrition.csv` (101 dishes), `healthy_alternatives.csv` (50 swaps), `build_nutrition.py`; put Kaggle `fastfood.csv` here |
 | `notebooks/` | `eda_week2.ipynb` (EDA), `train_resnet50_11class_final.ipynb` (the shipped model, 91.8%), `train_resnet50_11class.ipynb` (earlier run, 92.0%), `train_food101.ipynb` (EfficientNetB0, all 101 classes) |
-| `backend/` | `flutter_api.py` (API for the app), `admin_dashboard.py` (admin web dashboard), recommender, predictor, `evaluate.py`, 33 unit tests — see `backend/README.md` |
+| `backend/` | `flutter_api.py` (API for the app), `admin_dashboard.py` (admin web dashboard), recommender, predictor, `evaluate.py`, 35 unit tests — see `backend/README.md` |
 | `for_mobile_app/` | **share this with the Flutter developer**: `NutriGo_API_for_Flutter.md` + `nutrigo_api.dart` |
 | `calorie_model/` | calorie-band classifier for fast-food items (not used by the API yet) |
 | `reports/` | EDA figures, `recommender_eval.csv` |
@@ -39,9 +39,9 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pytest -q                             # 33 tests
+python -m pytest -q                             # 35 tests
 python evaluate.py                              # recommender numbers for slide 11
-$env:NUTRIGO_ADMIN_PASSWORD = "choose-a-password"
+$env:NUTRIGO_ADMIN_PASSWORD = "123456789"
 python app.py                                   # http://localhost:5000 opens the admin dashboard
 ```
 
@@ -55,7 +55,7 @@ Full API contract and a ready Dart client: `for_mobile_app/`.
 | 1 | Proposal & presentation | Slides | ✅ |
 | 2 | Data collection & exploration | Nutrition tables + EDA | ✅ tables + notebook (add fastfood.csv) |
 | 3 | Food recognition model | Trained model + accuracy | ✅ Swin Food-101 (101 dishes, 88% top-1 / 94% top-3 on our photos); own ResNet50: 11 dishes, 91.8% |
-| 4 | Recommender & backend API | Flask API + unit tests | ✅ 4 endpoints + admin dashboard + food photos + 7-day meal plans, 33 tests passing |
+| 4 | Recommender & backend API | Flask API + unit tests | ✅ 4 endpoints + admin dashboard + food photos + 7-day meal plans, 35 tests passing |
 | 5 | Interface (HMI) design | Working app | ✅ Flutter app (yours) → connect to API |
 | 6 | Testing & usability study | SUS score + fixes list | ⏳ to do |
 | 7 | Final app, report & demo | Final delivery | ⏳ to do |

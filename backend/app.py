@@ -30,6 +30,9 @@ MAX_UPLOAD_MB = 10
 def create_app(predictor=None, data_dir=DATA_DIR, fastfood_path=None, db_path=None, admin_password=None,
                image_dir=IMAGE_DIR, media_dir=None):
     app = Flask(__name__)
+    # behind ngrok (or any HTTPS proxy) build image / avatar links with the https scheme the phone used
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1)
     app.secret_key = os.environ.get("NUTRIGO_SECRET_KEY") or secrets.token_hex(32)
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_MB * 1024 * 1024
     try:

@@ -25,7 +25,7 @@ python app.py
 - Flutter API: `http://localhost:5000/api/...` (phone on the same Wi-Fi: `http://<PC IP>:5000`)
 - Dashboard: `http://localhost:5000/admin` → log in with `NUTRIGO_ADMIN_PASSWORD`
   (if it is not set, a one-off password is printed when the server starts)
-- Tests: `python -m pytest -q` → 33 passed
+- Tests: `python -m pytest -q` → 35 passed
 
 On Windows with App Control, start tools through `python -m ...` (pip, pytest) because the
 `.exe` launchers in `.venv\Scripts` can be blocked.
@@ -83,6 +83,14 @@ name and category colour. Overview shows how many swaps still need a photo.
 All 101 dishes and 50 swaps have a free Unsplash photo (sources and links in `data/food_photos.csv`, Unsplash License).
 Bulk import: `python import_photos.py` downloads that list again (`--force` replaces existing photos);
 `python import_photos.py --folder C:\photos` imports your own `<food_id>.jpg/.png/.webp` files.
+
+## Hosting on Hugging Face Spaces (free, permanent link)
+
+`deploy/huggingface/` has a `Dockerfile` and a Space `README.md`. Create a **Docker** Space, upload
+those two files, and set the secrets `NUTRIGO_ADMIN_PASSWORD` and `NUTRIGO_SECRET_KEY`. The image
+clones this GitHub repo and runs gunicorn on port 7860, so after each `git push` use the Space's
+*Factory rebuild* to update it. The free disk is temporary: accounts, plans and meal photos reset
+when the Space restarts.
 
 ## Recognition model
 
