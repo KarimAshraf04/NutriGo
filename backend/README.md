@@ -86,10 +86,11 @@ Bulk import: `python import_photos.py` downloads that list again (`--force` repl
 
 ## Hosting on Hugging Face Spaces (free, permanent link)
 
-`deploy/huggingface/` has a `Dockerfile` and a Space `README.md`. Create a **Docker** Space, upload
-those two files, and set the secrets `NUTRIGO_ADMIN_PASSWORD` and `NUTRIGO_SECRET_KEY`. The image
-clones this GitHub repo and runs gunicorn on port 7860, so after each `git push` use the Space's
-*Factory rebuild* to update it. The free disk is temporary: accounts, plans and meal photos reset
+`deploy/huggingface/` has `start.py`, `requirements.txt` and a Space `README.md` for a free **Gradio** Space
+(Docker Spaces are paid; the `Dockerfile` there is for that case). Create a Gradio Space, upload
+those three files, and set the secrets `NUTRIGO_ADMIN_PASSWORD` and `NUTRIGO_SECRET_KEY`. The image
+clones this GitHub repo at start-up and serves on port 7860, so after each `git push` restart the Space
+to update it. The free disk is temporary: accounts, plans and meal photos reset
 when the Space restarts.
 
 ## Recognition model

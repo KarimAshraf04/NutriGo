@@ -1,0 +1,9 @@
+# Space dependencies (gradio itself is installed by the Gradio SDK)
+flask>=3.0
+flask-cors>=4.0
+pillow>=10.0
+numpy>=1.26
+onnxruntime>=1.18
+a2wsgi>=1.10
+fastapi>=0.110
+uvicorn>=0.29
