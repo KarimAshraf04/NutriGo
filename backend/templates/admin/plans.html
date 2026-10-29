@@ -1,0 +1,73 @@
+{% extends "admin/base.html" %}
+{% block title %}Plans · NutriGo Admin{% endblock %}
+{% block content %}
+{% macro pct(a, b) %}{{ '%.0f%%' % (100 * a / b) if b else '—' }}{% endmacro %}
+<h1>Meal plans</h1>
+<p class="sub">Each user gets a 7-day plan (breakfast, lunch, dinner, snack) on their own calorie target.
+  When they choose a swap or upload a photo, that meal is replaced and the rest of the day is re-sized to stay on target.</p>
+
+<div class="grid">
+  <div class="card kpi">
+    <div class="label">Users with a plan</div>
+    <div class="value">{{ n_plans }}</div>
+    <div class="note">average target {{ '%.0f' % avg_target }} kcal / day</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Meals replaced by a swap</div>
+    <div class="value">{{ by_source.get('swap', 0) }}</div>
+    <div class="note">{{ pct(by_source.get('swap', 0), total_meals) }} of planned meals
+      {% if changes.get('swap') %}· saves {{ '%.0f' % changes['swap'][1] }} kcal each on average{% endif %}</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Meals logged by photo</div>
+    <div class="value">{{ by_source.get('photo', 0) }}</div>
+    <div class="note">{{ pct(by_source.get('photo', 0), total_meals) }} of planned meals</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Picked from the list</div>
+    <div class="value">{{ by_source.get('manual', 0) }}</div>
+    <div class="note">{{ total_meals }} meals planned in total</div>
+  </div>
+</div>
+
+<div class="grid two section">
+  <div class="card">
+    <h2>Most chosen swaps</h2>
+    {% if top_swaps %}{% set peak = top_swaps[0].n %}
+    <div class="bars">{% for r in top_swaps %}
+      <div class="bar-row"><span class="name">{{ r.name }}</span>
+        <div class="track"><div class="fill" style="width: {{ (100 * r.n / peak) | round(1) }}%"></div></div><span>{{ r.n }}</span></div>
+    {% endfor %}</div>
+    {% else %}<div class="empty">No swaps chosen in plans yet.</div>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Most photographed meals</h2>
+    {% if top_photos %}{% set peak = top_photos[0].n %}
+    <div class="bars">{% for r in top_photos %}
+      <div class="bar-row"><span class="name">{{ r.name }}</span>
+        <div class="track"><div class="fill" style="width: {{ (100 * r.n / peak) | round(1) }}%"></div></div><span>{{ r.n }}</span></div>
+    {% endfor %}</div>
+    {% else %}<div class="empty">No meals logged by photo yet.</div>{% endif %}
+  </div>
+</div>
+
+<div class="card section">
+  <h2>Plans</h2>
+  {% if users %}
+  <div class="scroll"><table>
+    <tr><th>User</th><th>Goal</th><th class="num">Target kcal</th><th class="num">Meals changed</th><th>Updated</th></tr>
+    {% for u in users %}
+    <tr><td><a href="{{ url_for('admin.plan_detail', user_id=u.user_id) }}">{{ u.name or u.user_id }}</a>
+        {% if u.name %}<a class="tag" href="{{ url_for('admin.user_detail', uid=u.user_id) }}">profile</a>{% else %}<span class="tag">anonymous</span>{% endif %}</td>
+        <td>{{ u.goal | replace('_', ' ') }}</td><td class="num">{{ '%.0f' % u.kcal_target }}</td>
+        <td class="num">{{ u.changed }} / 28</td><td>{{ u.updated | datetime }}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}<div class="empty">No plans yet. The app creates one with POST /api/plans.</div>{% endif %}
+</div>
+
+<div class="card section">
+  <h2>Latest meal changes</h2>
+  {% include "admin/_plan_changes.html" %}
+</div>
+{% endblock %}

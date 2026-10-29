@@ -1,0 +1,19 @@
+{% set rows = recent if recent is defined else rows %}
+{% if rows %}
+<div class="scroll"><table>
+  <tr><th>Time</th><th>Endpoint</th><th class="num">Status</th><th class="num">ms</th>
+      <th>Dish</th><th class="num">Confidence</th><th>Goal</th><th class="num">Swaps</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.ts | datetime }}</td>
+    <td>{{ endpoints.get(r.endpoint, r.endpoint) }}</td>
+    <td class="num {{ 'status-err' if r.status >= 400 else 'status-ok' }}">{{ r.status }}</td>
+    <td class="num">{{ '%.0f' % r.ms }}</td>
+    <td>{{ (r.food_id or '') | replace('_', ' ') }}</td>
+    <td class="num">{{ '%.0f%%' % (100 * r.confidence) if r.confidence is not none else '' }}{{ ' ⚠' if r.low_conf }}</td>
+    <td>{{ (r.goal or '') | replace('_', ' ') }}</td>
+    <td class="num">{{ r.n_swaps if r.n_swaps is not none else '' }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="empty">No requests logged yet.</div>{% endif %}

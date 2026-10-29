@@ -1,0 +1,69 @@
+{% extends "admin/base.html" %}
+{% block title %}Try a photo · NutriGo Admin{% endblock %}
+{% block content %}
+<h1>Try a photo</h1>
+<p class="sub">Upload a meal photo: you get the recognised dish and its healthier swaps with their photos,
+  the same as the app gets from <code>/api/predict</code>. These tests are not added to the request log.</p>
+{% if not model.available() %}
+  <div class="warn">No recognition model is loaded. See <code>backend/models/README.md</code>.</div>
+{% elif model.labels | length < 101 %}
+  <div class="warn">This model knows {{ model.labels | length }} dishes only: {{ model.labels | join(', ') | replace('_', ' ') }}.
+    Any other dish is mapped to one of them.</div>
+{% endif %}
+<form class="card toolbar" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="file" name="image" accept="image/*" required>
+  <select name="goal">{% for g in goals %}<option value="{{ g }}" {{ 'selected' if g == goal }}>{{ g | replace('_', ' ') }}</option>{% endfor %}</select>
+  <button>Recognise</button>
+</form>
+
+{% if result %}
+<div class="grid two">
+  <div class="card">
+    <img class="uploaded" src="{{ result.photo }}" alt="Uploaded photo">
+    <h2>Model guesses</h2>
+    <div class="bars">
+    {% for p in result.preds %}
+      <div class="bar-row">
+        <span class="name">{{ p.name }}</span>
+        <div class="track"><div class="fill" style="width: {{ (100 * p.confidence) | round(1) }}%"></div></div>
+        <span>{{ '%.1f%%' % (100 * p.confidence) }}</span>
+      </div>
+    {% endfor %}
+    </div>
+    {% if result.preds and result.preds[0].confidence < 0.6 %}
+      <div class="warn" style="margin-top: 12px;">Low confidence: the app would show the manual picker.</div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <h2>{{ result.best.name if result.best else 'No nutrition data' }}</h2>
+    {% if result.best %}
+      <p class="sub" style="margin: 0;">{{ result.best.serving }} · {{ '%.0f' % result.best.kcal }} kcal · health {{ result.best.health_score }}</p>
+    {% endif %}
+  </div>
+</div>
+{% if result.best %}
+<div class="card section">
+  <h2>Healthier swaps ({{ goal | replace('_', ' ') }})</h2>
+  {% if result.swaps %}
+  <div class="swap-grid">
+    {% for s in result.swaps %}
+    <div class="swap-card">
+      <img src="{{ img_url(s.food_id) }}" alt="{{ s.name }}">
+      <div class="body">
+        <strong>{{ s.name }}</strong><br>
+        <span class="kcal">{{ '%.0f' % s.kcal }} kcal · −{{ s.kcal_saved_pct }}%</span> · health {{ s.health_score }}<br>
+        {% for w in s.why %}<span class="tag">{{ w }}</span>{% endfor %}
+        <div style="margin-top: 6px;"><a href="{{ url_for('admin.edit_food', table='alternatives', food_id=s.food_id) }}">
+          {{ 'Change photo' if has_photo(s.food_id) else 'Add a photo' }}</a></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+    <div class="empty">Already a light choice: no swap.</div>
+  {% endif %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

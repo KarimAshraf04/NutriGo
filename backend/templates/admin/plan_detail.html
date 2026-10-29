@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}
+{% block title %}Plan {{ meta.user_id }} · NutriGo Admin{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.plans_overview') }}">← Meal plans</a></p>
+<div class="page-head">
+  <div>
+    <h1>Plan for {{ owner.name if owner else meta.user_id }}</h1>
+    <p class="sub">Goal {{ meta.goal | replace('_', ' ') }} · target {{ '%.0f' % meta.kcal_target }} kcal / day ·
+      updated {{ meta.updated | datetime }}</p>
+  </div>
+  {% if owner %}<div class="actions"><a class="btn ghost" href="{{ url_for('admin.user_detail', uid=owner.id) }}">Open profile</a></div>{% endif %}
+</div>
+
+{% include "admin/_plan_week.html" %}
+
+<div class="card section">
+  <h2>Changes in this plan</h2>
+  {% include "admin/_plan_changes.html" %}
+</div>
+{% endblock %}

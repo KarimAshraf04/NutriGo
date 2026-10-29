@@ -1,0 +1,16 @@
+# Core API + admin dashboard
+flask>=3.0
+flask-cors>=4.0
+pillow>=10.0
+numpy>=1.26
+pytest>=8.0
+
+# Recognition model — install ONE of these:
+#  a) our ResNet50 as models/food_model.onnx (made with convert_to_onnx.py) — works on Windows
+onnxruntime>=1.18
+onnx>=1.16        # only for the tests
+#  b) or models/food_model.keras on TensorFlow (Linux/Colab, or Windows without App Control):
+# tensorflow>=2.20   # food_model.keras was saved with Keras 3.13.2 (TF 2.20)
+#  c) or the pretrained ViT fallback (nateraw/food):
+# transformers>=4.40
+# torch>=2.2

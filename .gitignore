@@ -1,0 +1,26 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Personal data: app accounts, profile + meal photos, request log, plans (never commit)
+backend/instance/
+
+# Models over GitHub's 100 MB limit (kept locally; the API uses swin_food101/model_quantized.onnx)
+backend/models/food_model.keras
+backend/models/swin_food101/model.onnx
+
+# Temp / partial files
+*.tmp
+*.part
+
+# Kaggle data with its own license (download it, see data/README.md)
+data/fastfood.csv
+
+# Local tool settings
+.claude/
+.vscode/
+.DS_Store
+Thumbs.db

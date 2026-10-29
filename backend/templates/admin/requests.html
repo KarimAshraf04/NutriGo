@@ -1,0 +1,17 @@
+{% extends "admin/base.html" %}
+{% block title %}Requests · NutriGo Admin{% endblock %}
+{% block content %}
+<h1>Requests</h1>
+<p class="sub">The last 200 calls from the Flutter app. Photos and personal data (age, weight, height) are never stored.</p>
+<form class="toolbar" method="get">
+  <select name="endpoint">
+    <option value="">All endpoints</option>
+    {% for key, label in endpoints.items() %}
+      <option value="{{ key }}" {{ 'selected' if key == endpoint }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <label><input type="checkbox" name="errors" value="1" {{ 'checked' if errors_only }}> Errors only</label>
+  <button>Filter</button>
+</form>
+<div class="card">{% include "admin/_requests_table.html" %}</div>
+{% endblock %}

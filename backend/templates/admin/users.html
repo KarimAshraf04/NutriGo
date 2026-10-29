@@ -1,0 +1,59 @@
+{% extends "admin/base.html" %}
+{% block title %}Users · NutriGo Admin{% endblock %}
+{% block content %}
+{% macro bmi_pill(label) -%}
+  {%- if label -%}<span class="pill {{ 'ok' if label == 'Healthy' else 'warn' if label in ('Overweight', 'Underweight') else 'bad' }}">{{ label }}</span>{%- endif -%}
+{%- endmacro %}
+<div class="page-head">
+  <div>
+    <h1>Users</h1>
+    <p class="sub">Everyone who signed up in the NutriGo app. Click a person to see their profile, photos, weight and meal plan.</p>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card kpi"><div class="label">Accounts</div><div class="value">{{ stats[0] }}</div>
+    <div class="note">{{ stats[1] or 0 }} new in the last 7 days</div></div>
+  <div class="card kpi"><div class="label">Active this week</div><div class="value">{{ stats[2] or 0 }}</div>
+    <div class="note">opened the app in the last 7 days</div></div>
+  <div class="card kpi"><div class="label">Average weight</div>
+    <div class="value">{{ '%.1f' % stats[3] if stats[3] else '—' }}<small style="font-size: 14px; font-weight: 600;"> kg</small></div>
+    <div class="note">of users who entered it</div></div>
+  <div class="card kpi"><div class="label">Average height</div>
+    <div class="value">{{ '%.0f' % stats[4] if stats[4] else '—' }}<small style="font-size: 14px; font-weight: 600;"> cm</small></div>
+    <div class="note">of users who entered it</div></div>
+</div>
+
+<div class="card section">
+  <form class="toolbar" method="get">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search name or email" style="min-width: 240px;">
+    <button>Search</button>
+    {% if q %}<a class="btn ghost" href="{{ url_for('admin.users_list') }}">Clear</a>{% endif %}
+  </form>
+  {% if rows %}
+  <div class="scroll"><table>
+    <tr><th>User</th><th>Sex · age</th><th class="num">Height</th><th class="num">Weight</th><th>BMI</th>
+        <th>Goal</th><th>Plan</th><th class="num">Photos</th><th>Last seen</th></tr>
+    {% for u in rows %}
+    <tr>
+      <td><a class="who" href="{{ url_for('admin.user_detail', uid=u.id) }}" style="color: inherit;">
+        {% if u.has_avatar %}<img class="avatar" src="{{ url_for('admin.user_avatar', uid=u.id) }}" alt="">
+        {% else %}<span class="avatar">{{ u.name[:1] | upper }}</span>{% endif %}
+        <span class="meta"><div style="font-weight: 600; color: var(--brand);">{{ u.name }}</div>
+          <div class="muted" style="font-size: 12.5px;">{{ u.email }}</div></span></a></td>
+      <td>{{ (u.sex or '—') | capitalize }}{% if u.age %} · {{ '%.0f' % u.age }}{% endif %}</td>
+      <td class="num">{{ '%.0f cm' % u.height_cm if u.height_cm else '—' }}</td>
+      <td class="num">{{ '%.1f kg' % u.weight_kg if u.weight_kg else '—' }}</td>
+      <td>{% if u.bmi %}{{ u.bmi }} {{ bmi_pill(u.bmi_label) }}{% else %}—{% endif %}</td>
+      <td>{{ (u.goal or '—') | replace('_', ' ') }}</td>
+      <td>{% if u.has_plan %}<span class="pill ok">7-day plan</span>{% else %}<span class="pill mute">none</span>{% endif %}</td>
+      <td class="num">{{ u.n_photos }}</td>
+      <td>{{ u.last_seen | datetime }}</td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+    <div class="empty">{{ 'Nobody matches "' ~ q ~ '".' if q else 'No accounts yet. Users sign up in the app (POST /api/auth/register).' }}</div>
+  {% endif %}
+</div>
+{% endblock %}

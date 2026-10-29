@@ -1,0 +1,48 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ row.name or 'New item' }} · NutriGo Admin{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.foods', table=table) }}">← {{ tables[table] }}</a></p>
+<h1>{{ row.name if food_id else ('New dish' if table == 'foods' else 'New healthier swap') }}</h1>
+<p class="sub">Values are per serving. The health score is recalculated when you save.</p>
+{% if in_model %}
+  <div class="warn">The photo model recognises this dish, so its ID cannot change.</div>
+{% endif %}
+<form class="card" method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="form-grid">
+    <label>ID
+      <input type="text" name="food_id" value="{{ food_id or row.food_id or '' }}" {{ 'readonly' if food_id }}
+             placeholder="grilled_chicken_wrap" required pattern="[a-z0-9_]{2,60}"></label>
+    <label>Name <input type="text" name="name" value="{{ row.name or '' }}" required></label>
+    <label>Category
+      <select name="category" required>
+        {% for c in categories %}<option {{ 'selected' if c == row.category }}>{{ c }}</option>{% endfor %}
+      </select></label>
+    <label>Serving <input type="text" name="serving" value="{{ row.serving or '' }}" placeholder="1 plate" required></label>
+    {% for key in numeric %}
+      <label>{{ key | replace('_g', ' (g)') | replace('_mg', ' (mg)') | replace('_', ' ') }}
+        <input type="number" name="{{ key }}" value="{{ row[key] if row[key] is defined else '' }}"
+               min="0" max="10000" step="any" required></label>
+    {% endfor %}
+  </div>
+  <label style="display: grid; gap: 4px; margin-top: 12px; font-size: 13px; color: var(--muted);">
+    Tags (comma separated; "sweet" keeps swaps sweet, "vegetarian" enables the vegetarian goal)
+    <input type="text" name="tags" value="{{ row.tags or '' }}" placeholder="grilled, chicken, savory"></label>
+  <div class="photo-box">
+    {% if food_id %}<img src="{{ img_url(food_id) }}" alt="Current photo of {{ row.name }}">{% endif %}
+    <label style="display: grid; gap: 4px; font-size: 13px; color: var(--muted);">
+      Photo (JPG, PNG or WebP, up to 10 MB; resized to 800 px). The Flutter app shows it on swap cards.
+      <input type="file" name="photo" accept="image/*">
+      {% if food_id and has_photo(food_id) %}
+        <span><input type="checkbox" name="remove_photo" value="1"> Remove the current photo</span>
+      {% elif food_id %}
+        <span>No photo yet: the app shows a generated card with the name.</span>
+      {% endif %}
+    </label>
+  </div>
+  <div style="margin-top: 16px; display: flex; gap: 8px;">
+    <button>Save</button>
+    <a class="btn ghost" href="{{ url_for('admin.foods', table=table) }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

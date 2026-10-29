@@ -1,0 +1,20 @@
+{
+  "class_names": [
+    "apple_pie",
+    "beef_carpaccio",
+    "bibimbap",
+    "cup_cakes",
+    "foie_gras",
+    "french_fries",
+    "garlic_bread",
+    "pizza",
+    "spaghetti_carbonara",
+    "spring_rolls",
+    "strawberry_shortcake"
+  ],
+  "img_size": [
+    224,
+    224
+  ],
+  "rescale": 0.00392156862745098
+}

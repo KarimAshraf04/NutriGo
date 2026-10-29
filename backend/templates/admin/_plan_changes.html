@@ -1,0 +1,16 @@
+{% if recent %}
+<div class="scroll"><table>
+  <tr><th>Time</th><th>User</th><th>Day · meal</th><th>Was</th><th>Now</th><th>How</th><th class="num">kcal</th></tr>
+  {% for c in recent %}
+  <tr>
+    <td>{{ c.ts | datetime }}</td>
+    <td><a href="{{ url_for('admin.plan_detail', user_id=c.user_id) }}">{{ c.user_id[:12] }}</a></td>
+    <td>Day {{ c.day }} · {{ c.meal }}</td>
+    <td>{{ food_name(c.old_food_id) }}</td>
+    <td>{{ food_name(c.new_food_id) }}</td>
+    <td><span class="src {{ c.source }}">{{ source_labels.get(c.source, c.source) }}</span></td>
+    <td class="num">{{ '%.0f' % c.kcal_before }} → {{ '%.0f' % c.kcal_after }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}<div class="empty">No meals changed yet.</div>{% endif %}

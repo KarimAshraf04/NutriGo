@@ -1,0 +1,184 @@
+"""App accounts: email + password sign-in, profile, profile photo, meal-photo gallery, weight history.
+
+Passwords are stored as salted hashes (werkzeug scrypt/pbkdf2), never in plain text. Login gives a
+random token; only its SHA-256 is stored, so a copy of the database cannot be used to sign in.
+Profile and meal photos are personal data: they live in backend/instance/user_media/<user_id>/
+(not under static/), and are served only to their owner (token) or to a logged-in admin.
+Deleting an account removes the profile, tokens, photos, weight history and meal plan.
+"""
+import contextlib
+import hashlib
+import io
+import os
+import re
+import secrets
+import shutil
+import sqlite3
+import time
+
+from werkzeug.security import check_password_hash, generate_password_hash
+
+EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,}$")
+MIN_PASSWORD = 8
+TOKEN_DAYS = 30
+PROFILE_FIELDS = ("name", "sex", "age", "height_cm", "weight_kg", "activity", "goal")
+LIMITS = {"age": (10, 100), "height_cm": (100, 250), "weight_kg": (25, 300)}
+PHOTO_SIDE = 800
+
+
+def bmi(height_cm, weight_kg):
+    if not height_cm or not weight_kg:
+        return None, None
+    value = weight_kg / (height_cm / 100) ** 2
+    label = ("Underweight" if value < 18.5 else "Healthy" if value < 25 else
+             "Overweight" if value < 30 else "Obese")
+    return round(value, 1), label
+
+
+def _token_hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _save_jpeg(data, path, side=PHOTO_SIDE):
+    """Check it is an image, fix rotation, resize, drop EXIF (GPS etc.) and save as JPEG."""
+    from PIL import Image, ImageOps
+    Image.open(io.BytesIO(data)).verify()
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+    img.thumbnail((side, side))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    img.save(path + ".tmp", "JPEG", quality=85)
+    os.replace(path + ".tmp", path)
+
+
+class UserStore:
+    def __init__(self, db_path, media_dir):
+        self.path, self.media_dir = db_path, media_dir
+        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+        self.execute("""CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL, password_hash TEXT NOT NULL,
+            sex TEXT, age REAL, height_cm REAL, weight_kg REAL, activity TEXT, goal TEXT,
+            has_avatar INTEGER DEFAULT 0, created REAL, last_seen REAL)""")
+        self.execute("""CREATE TABLE IF NOT EXISTS user_tokens (
+            token_hash TEXT PRIMARY KEY, user_id TEXT, created REAL, expires REAL)""")
+        self.execute("""CREATE TABLE IF NOT EXISTS user_weights (
+            id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, weight_kg REAL)""")
+        self.execute("""CREATE TABLE IF NOT EXISTS user_photos (
+            id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, food_id TEXT, confidence REAL,
+            day INTEGER, meal TEXT, source TEXT)""")
+
+    def execute(self, sql, args=()):
+        with contextlib.closing(sqlite3.connect(self.path)) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(sql, args).fetchall()
+            conn.commit()
+            return rows
+
+    # ---------- accounts ----------
+
+    def create(self, email, name, password, profile):
+        now = time.time()
+        uid = secrets.token_hex(16)
+        fields = {k: profile.get(k) for k in PROFILE_FIELDS if k != "name"}
+        self.execute("INSERT INTO users (id, email, name, password_hash, sex, age, height_cm, weight_kg, activity, goal, "
+                     "created, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (uid, email.lower(), name, generate_password_hash(password), fields["sex"], fields["age"],
+                      fields["height_cm"], fields["weight_kg"], fields["activity"], fields["goal"], now, now))
+        if fields["weight_kg"]:
+            self.execute("INSERT INTO user_weights (user_id, ts, weight_kg) VALUES (?, ?, ?)",
+                         (uid, now, fields["weight_kg"]))
+        return uid
+
+    def by_email(self, email):
+        rows = self.execute("SELECT * FROM users WHERE email = ?", (email.lower(),))
+        return dict(rows[0]) if rows else None
+
+    def get(self, uid):
+        rows = self.execute("SELECT * FROM users WHERE id = ?", (uid,))
+        return dict(rows[0]) if rows else None
+
+    def exists(self, uid):
+        return bool(self.execute("SELECT 1 FROM users WHERE id = ?", (uid,)))
+
+    def check_password(self, user, password):
+        return check_password_hash(user["password_hash"], password)
+
+    def update(self, uid, fields):
+        if not fields:
+            return
+        old = self.get(uid)
+        sets = ", ".join(f"{k} = ?" for k in fields)
+        self.execute(f"UPDATE users SET {sets} WHERE id = ?", (*fields.values(), uid))
+        if "weight_kg" in fields and fields["weight_kg"] and fields["weight_kg"] != old["weight_kg"]:
+            self.execute("INSERT INTO user_weights (user_id, ts, weight_kg) VALUES (?, ?, ?)",
+                         (uid, time.time(), fields["weight_kg"]))
+
+    def touch(self, uid):
+        self.execute("UPDATE users SET last_seen = ? WHERE id = ?", (time.time(), uid))
+
+    def delete(self, uid):
+        for table in ("user_tokens", "user_weights", "user_photos"):
+            self.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
+        self.execute("DELETE FROM users WHERE id = ?", (uid,))
+        shutil.rmtree(self.user_dir(uid), ignore_errors=True)
+
+    # ---------- tokens ----------
+
+    def new_token(self, uid):
+        token = secrets.token_urlsafe(32)
+        now = time.time()
+        self.execute("INSERT INTO user_tokens VALUES (?, ?, ?, ?)",
+                     (_token_hash(token), uid, now, now + TOKEN_DAYS * 86400))
+        self.touch(uid)
+        return token
+
+    def user_for_token(self, token):
+        rows = self.execute("SELECT user_id FROM user_tokens WHERE token_hash = ? AND expires > ?",
+                            (_token_hash(token), time.time()))
+        return rows[0]["user_id"] if rows else None
+
+    def revoke(self, token):
+        self.execute("DELETE FROM user_tokens WHERE token_hash = ?", (_token_hash(token),))
+
+    # ---------- photos ----------
+
+    def user_dir(self, uid):
+        return os.path.join(self.media_dir, uid)
+
+    def avatar_path(self, uid):
+        return os.path.join(self.user_dir(uid), "avatar.jpg")
+
+    def set_avatar(self, uid, data):
+        _save_jpeg(data, self.avatar_path(uid), side=512)
+        self.execute("UPDATE users SET has_avatar = 1 WHERE id = ?", (uid,))
+
+    def add_photo(self, uid, data, food_id, confidence, day=None, meal=None, source="predict"):
+        cur = self.execute("INSERT INTO user_photos (user_id, ts, food_id, confidence, day, meal, source) "
+                           "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+                           (uid, time.time(), food_id, confidence, day, meal, source))
+        pid = cur[0]["id"]
+        try:
+            _save_jpeg(data, self.photo_path(uid, pid))
+        except Exception:
+            self.execute("DELETE FROM user_photos WHERE id = ?", (pid,))
+            raise
+        return pid
+
+    def photo_path(self, uid, pid):
+        return os.path.join(self.user_dir(uid), "meals", f"{int(pid)}.jpg")
+
+    def photos(self, uid, limit=200):
+        return [dict(r) for r in self.execute(
+            "SELECT * FROM user_photos WHERE user_id = ? ORDER BY id DESC LIMIT ?", (uid, limit))]
+
+    def photo(self, uid, pid):
+        rows = self.execute("SELECT * FROM user_photos WHERE user_id = ? AND id = ?", (uid, pid))
+        return dict(rows[0]) if rows else None
+
+    def delete_photo(self, uid, pid):
+        self.execute("DELETE FROM user_photos WHERE user_id = ? AND id = ?", (uid, pid))
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(self.photo_path(uid, pid))
+
+    def weights(self, uid):
+        return [dict(r) for r in self.execute(
+            "SELECT ts, weight_kg FROM user_weights WHERE user_id = ? ORDER BY ts", (uid,))]

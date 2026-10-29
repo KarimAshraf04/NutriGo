@@ -1,0 +1,91 @@
+{% extends "admin/base.html" %}
+{% block title %}{{ user.name }} · NutriGo Admin{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.users_list') }}">← Users</a></p>
+
+<div class="profile-head">
+  {% if user.has_avatar %}<img class="avatar lg" src="{{ url_for('admin.user_avatar', uid=user.id) }}" alt="Profile photo of {{ user.name }}">
+  {% else %}<span class="avatar lg">{{ user.name[:1] | upper }}</span>{% endif %}
+  <div style="flex: 1; min-width: 220px;">
+    <h1>{{ user.name }}</h1>
+    <div class="muted">{{ user.email }}</div>
+    <div class="muted" style="font-size: 13px; margin-top: 4px;">Joined {{ user.created | datetime }} · last seen {{ user.last_seen | datetime }}</div>
+  </div>
+  <form method="post" action="{{ url_for('admin.delete_user', uid=user.id) }}"
+        onsubmit='return confirm({{ ("Delete the account of " ~ user.name ~ ", with its meal plan and all photos? This cannot be undone.") | tojson }});'>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="danger" style="padding: 9px 14px;">Delete account</button>
+  </form>
+</div>
+
+<div class="facts">
+  <div class="fact"><div class="k">Sex</div><div class="v">{{ (user.sex or '—') | capitalize }}</div></div>
+  <div class="fact"><div class="k">Age</div><div class="v">{{ '%.0f' % user.age if user.age else '—' }}</div><div class="s">years</div></div>
+  <div class="fact"><div class="k">Height</div><div class="v">{{ '%.0f' % user.height_cm if user.height_cm else '—' }}</div><div class="s">cm</div></div>
+  <div class="fact"><div class="k">Weight</div><div class="v">{{ '%.1f' % user.weight_kg if user.weight_kg else '—' }}</div>
+    <div class="s">kg{% if weight_chart %} · {{ '%+.1f' % weight_chart.change }} kg since first entry{% endif %}</div></div>
+  <div class="fact"><div class="k">BMI</div><div class="v">{{ bmi or '—' }}</div>
+    <div class="s">{% if bmi_label %}<span class="pill {{ 'ok' if bmi_label == 'Healthy' else 'warn' if bmi_label in ('Overweight', 'Underweight') else 'bad' }}">{{ bmi_label }}</span>{% else %}needs height + weight{% endif %}</div></div>
+  <div class="fact"><div class="k">Activity</div><div class="v" style="font-size: 16px;">{{ (user.activity or '—') | replace('_', ' ') | capitalize }}</div></div>
+  <div class="fact"><div class="k">Goal</div><div class="v" style="font-size: 16px;">{{ (user.goal or '—') | replace('_', ' ') | capitalize }}</div></div>
+  <div class="fact"><div class="k">Daily target</div>
+    <div class="v">{{ target.kcal if target else '—' }}</div>
+    <div class="s">{% if target %}kcal · P {{ target.protein_g }} g · C {{ target.carbs_g }} g · F {{ target.fat_g }} g{% else %}needs sex, age, height, weight{% endif %}</div></div>
+</div>
+
+<div class="grid two section">
+  <div class="card">
+    <h2>Weight history</h2>
+    {% if weight_chart %}
+      <svg class="chart-line" viewBox="0 0 {{ weight_chart.w }} {{ weight_chart.h }}" role="img" aria-label="Weight over time">
+        <polyline points="{{ weight_chart.points }}"/>
+        {% for d in weight_chart.dots %}
+          <circle cx="{{ d.x }}" cy="{{ d.y }}" r="4"><title>{{ d.ts | datetime }}: {{ '%.1f' % d.kg }} kg</title></circle>
+          {% if loop.first or loop.last %}<text x="{{ d.x }}" y="{{ d.y - 9 }}" text-anchor="{{ 'start' if loop.first else 'end' }}">{{ '%.1f' % d.kg }} kg</text>{% endif %}
+        {% endfor %}
+      </svg>
+    {% elif weights %}
+      <div class="empty">One entry so far: {{ '%.1f' % weights[0].weight_kg }} kg on {{ weights[0].ts | datetime }}.</div>
+    {% else %}<div class="empty">No weight entered yet.</div>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Meal plan</h2>
+    {% if meta %}
+      <p style="margin: 0 0 10px;">Goal <b>{{ meta.goal | replace('_', ' ') }}</b> · target <b>{{ '%.0f' % meta.kcal_target }} kcal</b> / day ·
+        updated {{ meta.updated | datetime }}</p>
+      {% set changed = days | map(attribute='meals') | sum(start=[]) | rejectattr('source', 'equalto', 'plan') | list %}
+      <p class="muted" style="margin: 0 0 14px;">{{ changed | length }} of 28 meals changed by the user
+        ({{ changed | selectattr('source', 'equalto', 'swap') | list | length }} swaps,
+        {{ changed | selectattr('source', 'equalto', 'photo') | list | length }} photos).</p>
+      <a class="btn ghost" href="{{ url_for('admin.plan_detail', user_id=user.id) }}">Open the full plan</a>
+    {% else %}<div class="empty">No meal plan yet.</div>{% endif %}
+  </div>
+</div>
+
+<div class="card section">
+  <h2>Meal photos ({{ photos | length }})</h2>
+  {% if photos %}
+  <div class="gallery">
+    {% for p in photos %}
+    <figure>
+      <a href="{{ url_for('admin.user_photo', uid=user.id, pid=p.id) }}" target="_blank">
+        <img src="{{ url_for('admin.user_photo', uid=user.id, pid=p.id) }}" alt="{{ p.name }}" loading="lazy"></a>
+      <figcaption><strong>{{ p.name }}</strong> <span class="muted">{{ '%.0f%%' % (100 * p.confidence) if p.confidence is not none else '' }}</span><br>
+        <span class="muted">{{ p.ts | datetime }}{% if p.day %} · Day {{ p.day }} {{ p.meal }}{% endif %}</span></figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty">No meal photos yet. Photos the user takes in the app appear here.</div>{% endif %}
+</div>
+
+{% if meta %}
+<div class="section">
+  <h2>This week</h2>
+  {% include "admin/_plan_week.html" %}
+</div>
+<div class="card section">
+  <h2>Plan changes</h2>
+  {% include "admin/_plan_changes.html" %}
+</div>
+{% endif %}
+{% endblock %}

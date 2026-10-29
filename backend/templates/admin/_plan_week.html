@@ -1,0 +1,18 @@
+<div class="week">
+  {% for d in days %}
+  <div class="day-col">
+    <h3>Day {{ d.day }}</h3>
+    <div class="{{ 'on-target' if d.diff_kcal | abs <= 0.1 * d.target_kcal else 'off-target' }}" style="font-size: 13px;">
+      {{ d.totals.kcal }} / {{ d.target_kcal }} kcal ({{ '%+d' % d.diff_kcal }})</div>
+    {% for m in d.meals %}
+    <div class="meal">
+      <div class="when">{{ m.meal }} · budget {{ m.budget_kcal }}</div>
+      <img src="{{ img_url(m.food.food_id) }}" alt="{{ m.food.name }}" loading="lazy">
+      <strong>{{ m.food.name }}</strong><br>
+      {{ '%g' % m.portion }}× · {{ '%.0f' % m.food.kcal }} kcal
+      <span class="src {{ m.source }}">{{ source_labels[m.source] }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>

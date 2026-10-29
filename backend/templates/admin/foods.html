@@ -1,0 +1,56 @@
+{% extends "admin/base.html" %}
+{% block title %}Data · NutriGo Admin{% endblock %}
+{% block content %}
+<h1>Nutrition data</h1>
+<p class="sub">Changes are saved to <code>data/*.csv</code> and used by the Flutter API right away.
+  Running <code>data/build_nutrition.py</code> again would overwrite them.</p>
+
+<div class="tabs">
+  {% for key, label in tables.items() %}
+    <a href="{{ url_for('admin.foods', table=key) }}" class="{{ 'on' if key == table }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<form class="toolbar" method="get">
+  <input type="hidden" name="table" value="{{ table }}">
+  <input type="text" name="q" value="{{ q }}" placeholder="Search name or id">
+  <select name="category">
+    <option value="">All categories</option>
+    {% for c in categories %}<option {{ 'selected' if c == cat }}>{{ c }}</option>{% endfor %}
+  </select>
+  <button>Search</button>
+  <span style="flex: 1"></span>
+  <a class="btn" href="{{ url_for('admin.edit_food', table=table) }}">+ Add {{ 'dish' if table == 'foods' else 'swap' }}</a>
+</form>
+
+<div class="card">
+  <p class="sub" style="margin: 0 0 8px;">{{ rows | length }} of {{ total }} shown</p>
+  <div class="scroll"><table>
+    <tr><th>Photo</th><th>Name</th><th>Category</th><th>Serving</th><th class="num">kcal</th><th class="num">Protein</th>
+        <th class="num">Carbs</th><th class="num">Fat</th><th class="num">Health</th><th>Tags</th><th></th></tr>
+    {% for r in rows %}
+    <tr>
+      <td><img class="thumb" src="{{ img_url(r.food_id) }}" alt="" loading="lazy"
+               title="{{ 'photo' if has_photo(r.food_id) else 'no photo yet (generated card)' }}"></td>
+      <td><a href="{{ url_for('admin.edit_food', table=table, food_id=r.food_id) }}">{{ r.name }}</a>
+          {% if table == 'foods' and model.labels | length < total and r.food_id in model.labels %}<span class="tag" title="the photo model recognises this dish">model</span>{% endif %}</td>
+      <td>{{ r.category }}</td>
+      <td>{{ r.serving }}</td>
+      <td class="num">{{ '%.0f' % r.kcal }}</td>
+      <td class="num">{{ '%g' % r.protein_g }} g</td>
+      <td class="num">{{ '%g' % r.carbs_g }} g</td>
+      <td class="num">{{ '%g' % r.fat_g }} g</td>
+      <td class="num">{{ r.health_score }}</td>
+      <td>{% for t in r.tags %}<span class="tag">{{ t }}</span>{% endfor %}</td>
+      <td>{% if table == 'alternatives' %}
+        <form class="inline" method="post" action="{{ url_for('admin.delete_food', table=table, food_id=r.food_id) }}"
+              onsubmit="return confirm('Delete {{ r.name }}?');">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete</button>
+        </form>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="11" class="empty">Nothing matches.</td></tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endblock %}

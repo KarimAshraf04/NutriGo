@@ -1,0 +1,146 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% macro pct(v) %}{{ '%.0f%%' % (100 * v) if v is not none else '—' }}{% endmacro %}
+<div class="page-head">
+  <div>
+    <h1>Overview</h1>
+    <p class="sub">Live numbers from the Flutter app's requests, the meal plans and the food catalog.</p>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('admin.plans_overview') }}">Meal plans</a>
+    <a class="btn" href="{{ url_for('admin.try_model') }}">Try a photo</a>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card kpi">
+    <div class="label">API requests (24 h)</div>
+    <div class="value">{{ s.requests.last_24h }}</div>
+    <div class="note">{{ s.requests.total }} in total</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Error rate</div>
+    <div class="value">{{ pct(s.requests.error_rate) }}</div>
+    <div class="note">{{ s.requests.errors }} requests with status ≥ 400 · {{ '%.0f' % s.requests.avg_ms }} ms avg</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Photos recognised</div>
+    <div class="value">{{ s.predictions.total }}</div>
+    <div class="note">avg confidence {{ pct(s.predictions.avg_confidence) }} · low confidence {{ pct(s.predictions.low_confidence_rate) }}</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Recommender coverage</div>
+    <div class="value">{{ s.recommender.coverage }}</div>
+    <div class="note">top swap −{{ s.recommender.avg_kcal_saved }} kcal (−{{ s.recommender.avg_kcal_saved_pct }}%) · +{{ s.recommender.avg_health_gain }} health</div>
+  </div>
+</div>
+
+<div class="card section">
+  <h2>Requests per day (last 14 days)</h2>
+  {% set peak = (s.daily | map(attribute='n') | max) or 1 %}
+  <div class="cols">
+    {% for d in s.daily %}
+      <div class="col" title="{{ d.day }}: {{ d.n }} requests">
+        <div class="stick" style="height: {{ (100 * d.n / peak) | round(1) }}%"></div>
+        <div class="day">{{ d.day[8:] }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="grid two section">
+  <div class="card">
+    <h2>Most photographed dishes</h2>
+    {% if s.top_predicted %}
+      {% set peak = s.top_predicted[0].n %}
+      <div class="bars">
+      {% for r in s.top_predicted %}
+        <div class="bar-row" title="avg confidence {{ pct(r.confidence) }}">
+          <span class="name">{{ r.name }}</span>
+          <div class="track"><div class="fill" style="width: {{ (100 * r.n / peak) | round(1) }}%"></div></div>
+          <span>{{ r.n }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    {% else %}<div class="empty">No photos recognised yet.</div>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Most requested swaps</h2>
+    {% if s.top_recommended %}
+      {% set peak = s.top_recommended[0].n %}
+      <div class="bars">
+      {% for r in s.top_recommended %}
+        <div class="bar-row" title="{{ pct(r.with_swap) }} got a swap">
+          <span class="name">{{ r.name }}</span>
+          <div class="track"><div class="fill" style="width: {{ (100 * r.n / peak) | round(1) }}%"></div></div>
+          <span>{{ r.n }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    {% else %}<div class="empty">No swap requests yet.</div>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Goals chosen</h2>
+    {% if s.goals %}
+      {% set peak = s.goals[0].n %}
+      <div class="bars">
+      {% for r in s.goals %}
+        <div class="bar-row">
+          <span class="name">{{ r.goal | replace('_', ' ') }}</span>
+          <div class="track"><div class="fill" style="width: {{ (100 * r.n / peak) | round(1) }}%"></div></div>
+          <span>{{ r.n }}</span>
+        </div>
+      {% endfor %}
+      </div>
+    {% else %}<div class="empty">No swap requests yet.</div>{% endif %}
+  </div>
+  <div class="card">
+    <h2>Endpoints</h2>
+    {% if s.by_endpoint %}
+    <div class="scroll"><table>
+      <tr><th>Endpoint</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg ms</th></tr>
+      {% for r in s.by_endpoint %}
+        <tr><td>{{ r.label }}</td><td class="num">{{ r.n }}</td><td class="num">{{ r.errors }}</td>
+            <td class="num">{{ '%.0f' % r.ms }}</td></tr>
+      {% endfor %}
+    </table></div>
+    {% else %}<div class="empty">No API calls yet. Start the Flutter app or call /api/foods.</div>{% endif %}
+  </div>
+</div>
+
+<div class="grid section">
+  <div class="card kpi">
+    <div class="label">Recognition model</div>
+    <div class="value" style="font-size: 18px;">{{ 'Ready' if s.model.ready else 'Not loaded' }}</div>
+    <div class="note">{{ s.model.name }} · {{ s.model.classes }} dishes</div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Catalog</div>
+    <div class="value">{{ s.catalog.foods }} + {{ s.catalog.alternatives }}</div>
+    <div class="note">dishes + healthier swaps · {{ s.catalog.fastfood_items }} fast-food menu items<br>
+      photos: {{ s.catalog.swap_photos }}/{{ s.catalog.alternatives }} swaps, {{ s.catalog.food_photos }}/{{ s.catalog.foods }} dishes
+      · <a href="{{ url_for('admin.foods', table='alternatives') }}">add photos</a></div>
+  </div>
+  <div class="card kpi">
+    <div class="label">App users</div>
+    <div class="value">{{ s.accounts.total }}</div>
+    <div class="note">{{ s.accounts.new_7d }} new this week · <a href="{{ url_for('admin.users_list') }}">see everyone</a></div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Meal plans</div>
+    <div class="value">{{ s.plans.users }}</div>
+    <div class="note">users with a 7-day plan · {{ s.plans.swaps_chosen }} meals swapped,
+      {{ s.plans.photo_meals }} logged by photo · <a href="{{ url_for('admin.plans_overview') }}">open plans</a></div>
+  </div>
+  <div class="card kpi">
+    <div class="label">Already light (no swap)</div>
+    <div class="value">{{ s.recommender.no_swap | length }}</div>
+    <div class="note">{{ s.recommender.no_swap | join(', ') | replace('_', ' ') or '—' }}</div>
+  </div>
+</div>
+
+<div class="card section">
+  <h2>Latest requests <a href="{{ url_for('admin.requests_log') }}" style="font-size: 13px; font-weight: 400;">see all</a></h2>
+  {% include "admin/_requests_table.html" %}
+</div>
+{% endblock %}

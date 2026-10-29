@@ -1,0 +1,30 @@
+{
+  "class_names": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "bins": [
+    0,
+    350,
+    600,
+    "inf"
+  ],
+  "features": [
+    "restaurant",
+    "total_fat",
+    "sat_fat",
+    "trans_fat",
+    "cholesterol",
+    "sodium",
+    "total_carb",
+    "fiber",
+    "sugar",
+    "protein"
+  ],
+  "best_params": {
+    "model__learning_rate": 0.05,
+    "model__max_depth": 2,
+    "model__n_estimators": 200
+  }
+}

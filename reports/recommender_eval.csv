@@ -1,0 +1,102 @@
+food_id,category,kcal,health_score,n_swaps,top_swap,top_kcal,kcal_saved,kcal_saved_pct,health_gain
+baby_back_ribs,Meat,887.0,28,4,Grilled Chicken Breast with Steamed Veg,350.0,537,61,50
+filet_mignon,Meat,560.0,53,4,Grilled Lean Sirloin & Veg,420.0,140,25,18
+steak,Meat,700.0,50,4,Grilled Lean Sirloin & Veg,420.0,280,40,21
+prime_rib,Meat,820.0,34,4,Grilled Lean Sirloin & Veg,420.0,400,49,37
+pork_chop,Meat,520.0,55,4,Grilled Chicken Breast with Steamed Veg,350.0,170,33,23
+peking_duck,Meat,690.0,38,4,Roast Turkey Breast & Veg,330.0,360,52,37
+chicken_curry,Meat,560.0,46,4,Chicken Tikka with Cauliflower Rice,380.0,180,32,21
+hamburger,Fast food,650.0,38,4,Turkey Burger in Lettuce Wrap,290.0,360,55,25
+hot_dog,Fast food,450.0,38,4,"Turkey Hot Dog, Whole-Wheat Bun",260.0,190,42,18
+french_fries,Fast food,520.0,52,4,Air-Fried Potato Wedges,190.0,330,63,9
+pizza,Fast food,600.0,42,4,Thin-Crust Veggie Pizza,360.0,240,40,12
+chicken_wings,Fast food,720.0,39,4,Baked Chicken Wings,330.0,390,54,22
+nachos,Fast food,780.0,39,4,Bean & Veggie Tacos,380.0,400,51,28
+poutine,Fast food,740.0,32,4,Turkey Burger in Lettuce Wrap,290.0,450,61,31
+onion_rings,Fast food,480.0,43,4,Air-Fried Potato Wedges,190.0,290,60,18
+chicken_quesadilla,Fast food,680.0,39,4,Bean & Veggie Tacos,380.0,300,44,28
+tacos,Fast food,620.0,48,4,Bean & Veggie Tacos,380.0,240,39,19
+lasagna,Pasta,680.0,39,2,Light Veggie Lasagna,380.0,300,44,19
+macaroni_and_cheese,Pasta,640.0,32,2,Whole-Wheat Mac & Cauliflower Cheese,360.0,280,44,26
+spaghetti_bolognese,Pasta,620.0,52,2,Zucchini Noodles Marinara,220.0,400,65,5
+spaghetti_carbonara,Pasta,720.0,39,3,Zucchini Noodles Marinara,220.0,500,69,18
+ravioli,Pasta,520.0,43,2,Zucchini Noodles Marinara,220.0,300,58,14
+gnocchi,Pasta,552.0,40,2,Zucchini Noodles Marinara,220.0,332,60,17
+bibimbap,Rice & noodles,590.0,52,4,Cauliflower Fried Rice,240.0,350,59,9
+fried_rice,Rice & noodles,640.0,43,4,Cauliflower Fried Rice,240.0,400,62,18
+pad_thai,Rice & noodles,680.0,41,4,Shrimp Zucchini Pad Thai,360.0,320,47,21
+paella,Rice & noodles,620.0,55,4,Cauliflower Fried Rice,240.0,380,61,6
+ramen,Rice & noodles,560.0,40,4,Cauliflower Fried Rice,240.0,320,57,21
+pho,Rice & noodles,450.0,49,4,Cauliflower Fried Rice,240.0,210,47,12
+risotto,Rice & noodles,660.0,35,4,Cauliflower Fried Rice,240.0,420,64,26
+club_sandwich,Sandwich,620.0,46,4,Turkey & Avocado Sandwich,390.0,230,37,20
+grilled_cheese_sandwich,Sandwich,520.0,35,4,Turkey & Avocado Sandwich,390.0,130,25,31
+croque_madame,Sandwich,650.0,32,4,Turkey & Avocado Sandwich,390.0,260,40,34
+lobster_roll_sandwich,Sandwich,475.0,48,4,"Turkey Hot Dog, Whole-Wheat Bun",260.0,215,45,8
+pulled_pork_sandwich,Sandwich,600.0,41,4,Turkey & Avocado Sandwich,390.0,210,35,25
+eggs_benedict,Breakfast,720.0,27,3,Veggie Egg-White Omelette,200.0,520,72,38
+pancakes,Breakfast,520.0,33,4,Oat & Banana Pancakes,320.0,200,38,26
+waffles,Breakfast,560.0,29,4,Whole-Grain Waffle with Berries,300.0,260,46,28
+french_toast,Breakfast,540.0,36,4,Whole-Grain Waffle with Berries,300.0,240,44,21
+omelette,Breakfast,380.0,47,2,Veggie Egg-White Omelette,200.0,180,47,18
+huevos_rancheros,Breakfast,560.0,51,4,Veggie Egg-White Omelette,200.0,360,64,14
+breakfast_burrito,Breakfast,528.0,47,4,Egg & Veggie Breakfast Wrap,320.0,208,39,14
+apple_pie,Dessert,410.0,33,4,Baked Cinnamon Apple,150.0,260,63,20
+baklava,Dessert,330.0,41,4,Fresh Fruit Salad,120.0,210,64,16
+beignets,Dessert,390.0,41,4,Fresh Fruit Salad,120.0,270,69,16
+bread_pudding,Dessert,420.0,32,4,Banana Nice Cream,150.0,270,64,23
+cannoli,Dessert,360.0,38,4,Banana Nice Cream,150.0,210,58,17
+carrot_cake,Dessert,490.0,29,4,Light Ricotta Cheesecake Cup,220.0,270,55,20
+cheesecake,Dessert,480.0,21,4,Light Ricotta Cheesecake Cup,220.0,260,54,28
+chocolate_cake,Dessert,520.0,24,4,Angel Food Cake with Berries,200.0,320,62,24
+chocolate_mousse,Dessert,350.0,33,4,Cocoa Avocado Mousse,210.0,140,40,26
+churros,Dessert,380.0,42,4,Fresh Fruit Salad,120.0,260,68,15
+creme_brulee,Dessert,340.0,29,4,Chia Pudding,200.0,140,41,39
+cup_cakes,Dessert,330.0,34,4,Fresh Fruit Salad,120.0,210,64,23
+donuts,Dessert,300.0,41,2,Fresh Fruit Salad,120.0,180,60,16
+frozen_yogurt,Dessert,230.0,40,2,Banana Nice Cream,150.0,80,35,15
+ice_cream,Dessert,280.0,36,2,Banana Nice Cream,150.0,130,46,19
+macarons,Dessert,290.0,41,2,Fresh Fruit Salad,120.0,170,59,16
+panna_cotta,Dessert,330.0,30,4,Chia Pudding,200.0,130,39,38
+red_velvet_cake,Dessert,490.0,24,4,Light Ricotta Cheesecake Cup,220.0,270,55,25
+strawberry_shortcake,Dessert,380.0,32,4,Fresh Fruit Salad,120.0,260,68,25
+tiramisu,Dessert,460.0,25,4,Banana Nice Cream,150.0,310,67,30
+clam_chowder,Soup,470.0,35,2,Light Tomato Basil Soup,140.0,330,70,21
+french_onion_soup,Soup,500.0,33,2,Light Tomato Basil Soup,140.0,360,72,23
+hot_and_sour_soup,Soup,220.0,49,1,Light Tomato Basil Soup,140.0,80,36,7
+lobster_bisque,Soup,530.0,24,2,Light Tomato Basil Soup,140.0,390,74,32
+miso_soup,Soup,110.0,56,0,,,,,
+edamame,Snack,190.0,71,0,,,,,
+falafel,Snack,420.0,60,2,Hummus with Veggie Sticks,160.0,260,62,5
+garlic_bread,Snack,380.0,44,4,Air-Fried Potato Wedges,190.0,190,50,17
+samosa,Snack,460.0,49,4,Air-Fried Potato Wedges,190.0,270,59,12
+spring_rolls,Snack,330.0,51,4,Hummus with Veggie Sticks,160.0,170,52,14
+takoyaki,Snack,380.0,47,4,Hummus with Veggie Sticks,160.0,220,58,18
+hummus,Snack,290.0,63,1,Hummus with Veggie Sticks,160.0,130,45,2
+guacamole,Snack,270.0,63,1,Hummus with Veggie Sticks,160.0,110,41,2
+grilled_salmon,Seafood,370.0,63,4,Shrimp & Veggie Skewers,220.0,150,41,2
+fish_and_chips,Seafood,720.0,49,4,Baked Cod & Sweet Potato,340.0,380,53,20
+sashimi,Seafood,180.0,68,0,,,,,
+sushi,Seafood,300.0,54,2,Shrimp & Veggie Skewers,220.0,80,27,11
+scallops,Seafood,220.0,60,1,Citrus Shrimp Salad,210.0,10,5,6
+mussels,Seafood,280.0,57,2,Shrimp & Veggie Skewers,220.0,60,21,8
+oysters,Seafood,120.0,60,0,,,,,
+shrimp_and_grits,Seafood,480.0,45,4,Shrimp & Veggie Skewers,220.0,260,54,20
+tuna_tartare,Seafood,250.0,61,1,Shrimp & Veggie Skewers,220.0,30,12,4
+ceviche,Seafood,200.0,65,0,,,,,
+beef_carpaccio,Appetizer,220.0,56,0,,,,,
+beef_tartare,Appetizer,300.0,54,1,Steamed Chicken & Veg Dumplings,220.0,80,27,7
+bruschetta,Appetizer,260.0,55,4,Light Tomato Basil Soup,140.0,120,46,1
+cheese_plate,Appetizer,380.0,40,4,Steamed Chicken & Veg Dumplings,220.0,160,42,21
+deviled_eggs,Appetizer,210.0,54,1,Light Tomato Basil Soup,140.0,70,33,2
+dumplings,Appetizer,300.0,52,1,Steamed Chicken & Veg Dumplings,220.0,80,27,9
+escargots,Appetizer,270.0,45,1,Steamed Chicken & Veg Dumplings,220.0,50,19,16
+foie_gras,Appetizer,360.0,38,1,Steamed Chicken & Veg Dumplings,220.0,140,39,23
+gyoza,Appetizer,300.0,52,1,Steamed Chicken & Veg Dumplings,220.0,80,27,9
+crab_cakes,Appetizer,320.0,52,3,Shrimp & Veggie Skewers,220.0,100,31,13
+fried_calamari,Appetizer,360.0,53,4,Shrimp & Veggie Skewers,220.0,140,39,12
+beet_salad,Salad,250.0,52,3,Citrus Shrimp Salad,210.0,40,16,14
+caesar_salad,Salad,360.0,51,2,Citrus Shrimp Salad,210.0,150,42,15
+caprese_salad,Salad,300.0,48,2,"Grilled Chicken Garden Salad, Light Dressing",250.0,50,17,22
+greek_salad,Salad,280.0,47,4,"Grilled Chicken Garden Salad, Light Dressing",250.0,30,11,23
+seaweed_salad,Salad,200.0,53,0,,,,,
