@@ -4,7 +4,7 @@
   flutter_api.py      /api/*    JSON API for the Flutter app (for_mobile_app/NutriGo_API_for_Flutter.md)
 
 Run:  python app.py      (listens on 0.0.0.0:5000; http://localhost:5000 opens the dashboard)
-Set NUTRIGO_ADMIN_PASSWORD before starting; otherwise a one-off password is printed.
+Dashboard password: NUTRIGO_ADMIN_PASSWORD, or the default 123456789 when it is not set.
 """
 import os
 import secrets
@@ -25,6 +25,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_DB = os.environ.get("NUTRIGO_DB", os.path.join(HERE, "instance", "nutrigo.db"))
 DEFAULT_MEDIA = os.environ.get("NUTRIGO_MEDIA_DIR", os.path.join(HERE, "instance", "user_media"))
 MAX_UPLOAD_MB = 10
+# used only when NUTRIGO_ADMIN_PASSWORD is not set; the code is public, so override it in production
+DEFAULT_ADMIN_PASSWORD = "123456789"
 
 
 def create_app(predictor=None, data_dir=DATA_DIR, fastfood_path=None, db_path=None, admin_password=None,
@@ -43,8 +45,9 @@ def create_app(predictor=None, data_dir=DATA_DIR, fastfood_path=None, db_path=No
 
     password = admin_password or os.environ.get("NUTRIGO_ADMIN_PASSWORD")
     if not password:
-        password = secrets.token_urlsafe(9)
-        print(f"[admin] NUTRIGO_ADMIN_PASSWORD is not set; dashboard password for this run: {password}")
+        password = DEFAULT_ADMIN_PASSWORD
+        print("[admin] NUTRIGO_ADMIN_PASSWORD is not set; using the default dashboard password. "
+              "Set NUTRIGO_ADMIN_PASSWORD before putting the server on the internet.")
 
     db_path = db_path or DEFAULT_DB
     app.extensions["nutrigo"] = SimpleNamespace(

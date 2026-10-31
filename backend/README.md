@@ -24,7 +24,7 @@ python app.py
 
 - Flutter API: `http://localhost:5000/api/...` (phone on the same Wi-Fi: `http://<PC IP>:5000`)
 - Dashboard: `http://localhost:5000/admin` → log in with `NUTRIGO_ADMIN_PASSWORD`
-  (if it is not set, a one-off password is printed when the server starts)
+  (if it is not set, the default password is `123456789` — change it before going online)
 - Tests: `python -m pytest -q` → 35 passed
 
 On Windows with App Control, start tools through `python -m ...` (pip, pytest) because the
@@ -103,7 +103,7 @@ blocked this file"), convert the model once on Google Colab with `convert_to_onn
 
 | Variable | Default |
 |---|---|
-| `NUTRIGO_ADMIN_PASSWORD` | random, printed at start-up |
+| `NUTRIGO_ADMIN_PASSWORD` | `123456789` (public in the code: set your own before going online) |
 | `NUTRIGO_SECRET_KEY` | random per start (admins are logged out on restart) |
 | `NUTRIGO_MODEL` | `auto` (Swin 101 dishes) — or `swin`, `onnx`, `keras`, `vit`, `none` |
 | `NUTRIGO_DB` | `backend/instance/nutrigo.db` |
