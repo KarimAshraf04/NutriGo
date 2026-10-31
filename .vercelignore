@@ -1,0 +1,18 @@
+# keep the upload small: only api/, backend/ (code, model, photos, templates) and data/ are needed
+notebooks/
+reports/
+calorie_model/
+deploy/*
+!deploy/vercel_fetch_model.sh
+for_mobile_app/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+backend/instance/
+backend/tests/
+backend/models/food_model.*
+backend/models/swin_food101/model.onnx
+# 89 MB: the build downloads the same file from Hugging Face (buildCommand in vercel.json, sha256 checked)
+backend/models/swin_food101/model_quantized.onnx
+data/fastfood.csv
+.claude/

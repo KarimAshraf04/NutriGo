@@ -65,6 +65,9 @@ class UserStore:
         self.execute("""CREATE TABLE IF NOT EXISTS user_photos (
             id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, food_id TEXT, confidence REAL,
             day INTEGER, meal TEXT, source TEXT)""")
+        # sign-up / sign-in / sign-out history for the dashboard (no IPs, no devices)
+        self.execute("""CREATE TABLE IF NOT EXISTS user_events (
+            id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, event TEXT)""")
 
     def execute(self, sql, args=()):
         with contextlib.closing(sqlite3.connect(self.path)) as conn:
@@ -115,8 +118,12 @@ class UserStore:
     def touch(self, uid):
         self.execute("UPDATE users SET last_seen = ? WHERE id = ?", (time.time(), uid))
 
+    def log_event(self, uid, event):
+        """event: register | login | logout"""
+        self.execute("INSERT INTO user_events (user_id, ts, event) VALUES (?, ?, ?)", (uid, time.time(), event))
+
     def delete(self, uid):
-        for table in ("user_tokens", "user_weights", "user_photos"):
+        for table in ("user_tokens", "user_weights", "user_photos", "user_events"):
             self.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
         self.execute("DELETE FROM users WHERE id = ?", (uid,))
         shutil.rmtree(self.user_dir(uid), ignore_errors=True)
@@ -132,9 +139,15 @@ class UserStore:
         return token
 
     def user_for_token(self, token):
+        now = time.time()
         rows = self.execute("SELECT user_id FROM user_tokens WHERE token_hash = ? AND expires > ?",
-                            (_token_hash(token), time.time()))
-        return rows[0]["user_id"] if rows else None
+                            (_token_hash(token), now))
+        if not rows:
+            return None
+        uid = rows[0]["user_id"]
+        # every signed-in call counts as "last seen" (at most one write a minute per user)
+        self.execute("UPDATE users SET last_seen = ? WHERE id = ? AND last_seen < ?", (now, uid, now - 60))
+        return uid
 
     def revoke(self, token):
         self.execute("DELETE FROM user_tokens WHERE token_hash = ?", (_token_hash(token),))

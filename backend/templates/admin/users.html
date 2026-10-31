@@ -16,6 +16,10 @@
     <div class="note">{{ stats[1] or 0 }} new in the last 7 days</div></div>
   <div class="card kpi"><div class="label">Active this week</div><div class="value">{{ stats[2] or 0 }}</div>
     <div class="note">opened the app in the last 7 days</div></div>
+  <div class="card kpi"><div class="label">Signed in now</div><div class="value">{{ stats[5] }}</div>
+    <div class="note">logged in and not logged out</div></div>
+  <div class="card kpi"><div class="label">Need a plan</div><div class="value">{{ stats[6] }}</div>
+    <div class="note">accounts without a 7-day plan</div></div>
   <div class="card kpi"><div class="label">Average weight</div>
     <div class="value">{{ '%.1f' % stats[3] if stats[3] else '—' }}<small style="font-size: 14px; font-weight: 600;"> kg</small></div>
     <div class="note">of users who entered it</div></div>
@@ -25,15 +29,36 @@
 </div>
 
 <div class="card section">
+  <h2 style="margin-top: 0;">Recent sign-ins and sign-outs</h2>
+  {% if events %}
+  <div class="scroll"><table>
+    <tr><th>When</th><th>User</th><th>What</th></tr>
+    {% for e in events %}
+    <tr><td>{{ e.ts | datetime }}</td>
+      <td><a href="{{ url_for('admin.user_detail', uid=e.id) }}">{{ e.name }}</a> <span class="muted">{{ e.email }}</span></td>
+      <td>{% if e.event == 'logout' %}<span class="pill mute">Logged out</span>
+          {% elif e.event == 'register' %}<span class="pill ok">Signed up</span>
+          {% else %}<span class="pill ok">Logged in</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+    <div class="empty">No sign-ins yet. They appear here when people sign up, log in or log out in the app.</div>
+  {% endif %}
+</div>
+
+<div class="card section">
   <form class="toolbar" method="get">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name or email" style="min-width: 240px;">
+    <select name="show">
+      {% for key, label in shows.items() %}<option value="{{ key }}" {{ 'selected' if key == show }}>{{ label }}</option>{% endfor %}
+    </select>
     <button>Search</button>
-    {% if q %}<a class="btn ghost" href="{{ url_for('admin.users_list') }}">Clear</a>{% endif %}
+    {% if q or show %}<a class="btn ghost" href="{{ url_for('admin.users_list') }}">Clear</a>{% endif %}
   </form>
   {% if rows %}
   <div class="scroll"><table>
     <tr><th>User</th><th>Sex · age</th><th class="num">Height</th><th class="num">Weight</th><th>BMI</th>
-        <th>Goal</th><th>Plan</th><th class="num">Photos</th><th>Last seen</th></tr>
+        <th>Goal</th><th>Plan</th><th class="num">Photos</th><th>Status</th><th>Last seen</th></tr>
     {% for u in rows %}
     <tr>
       <td><a class="who" href="{{ url_for('admin.user_detail', uid=u.id) }}" style="color: inherit;">
@@ -48,12 +73,13 @@
       <td>{{ (u.goal or '—') | replace('_', ' ') }}</td>
       <td>{% if u.has_plan %}<span class="pill ok">7-day plan</span>{% else %}<span class="pill mute">none</span>{% endif %}</td>
       <td class="num">{{ u.n_photos }}</td>
+      <td>{% if u.signed_in %}<span class="pill ok">Signed in</span>{% else %}<span class="pill mute">Logged out</span>{% endif %}</td>
       <td>{{ u.last_seen | datetime }}</td>
     </tr>
     {% endfor %}
   </table></div>
   {% else %}
-    <div class="empty">{{ 'Nobody matches "' ~ q ~ '".' if q else 'No accounts yet. Users sign up in the app (POST /api/auth/register).' }}</div>
+    <div class="empty">{{ 'Nobody matches this search.' if q or show else 'No accounts yet. Users sign up in the app (POST /api/auth/register).' }}</div>
   {% endif %}
 </div>
 {% endblock %}

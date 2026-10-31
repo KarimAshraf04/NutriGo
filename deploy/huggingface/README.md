@@ -19,7 +19,7 @@ https://github.com/KarimAshraf04/NutriGo at start-up and serves it on port 7860.
 - Admin dashboard: `https://<user>-<space>.hf.space/admin`
 
 Set the Space secrets `NUTRIGO_ADMIN_PASSWORD` and `NUTRIGO_SECRET_KEY` before using it
-(without the first, the dashboard password is the public default `123456789`).
+(without the first, a random dashboard password is made at each start and shown only in the Space logs).
 After a `git push` to GitHub, restart the Space (Settings → Restart) to load the new code.
 On the free tier the disk is temporary: accounts, plans, meal photos and the request log are
 reset whenever the Space restarts.

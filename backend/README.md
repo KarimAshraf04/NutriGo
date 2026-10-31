@@ -24,8 +24,8 @@ python app.py
 
 - Flutter API: `http://localhost:5000/api/...` (phone on the same Wi-Fi: `http://<PC IP>:5000`)
 - Dashboard: `http://localhost:5000/admin` → log in with `NUTRIGO_ADMIN_PASSWORD`
-  (if it is not set, the default password is `123456789` — change it before going online)
-- Tests: `python -m pytest -q` → 35 passed
+  (if it is not set, a random password is made at each start and printed in the console)
+- Tests: `python -m pytest -q` → 37 passed, 2 skipped (the ONNX tests need `onnx`)
 
 On Windows with App Control, start tools through `python -m ...` (pip, pytest) because the
 `.exe` launchers in `.venv\Scripts` can be blocked.
@@ -35,7 +35,7 @@ On Windows with App Control, start tools through `python -m ...` (pip, pytest) b
 | Page | What it shows |
 |---|---|
 | Overview | API requests (24 h / total), error rate, latency, photos recognised + average and low confidence, requests per day, most photographed dishes, most requested swaps, goals chosen, per-endpoint table, model status, recommender coverage (live `evaluate.py` numbers) |
-| Data | the 101 dishes and 50 swaps: search, filter, edit, add, upload a photo for each; swaps can be deleted. Saves to `data/*.csv`, the Flutter API uses the change at once. Re-running `data/build_nutrition.py` overwrites these edits. |
+| Data | the 101 dishes and 50 swaps: search, filter, edit, add, upload a photo for each; swaps can be deleted unless a meal plan uses them. Saves to `data/*.csv`, the Flutter API uses the change at once. Re-running `data/build_nutrition.py` overwrites these edits. |
 | Requests | last 200 API calls, filter by endpoint or errors |
 | Try a photo | upload a meal photo → model guesses, nutrition, and the healthier swaps with their photos (not logged) |
 | `/admin/api/stats` | the overview numbers as JSON, e.g. for a future admin screen in Flutter |
@@ -47,7 +47,8 @@ weight / height sent to `/api/target`.
 ## App accounts and the Users page
 
 People sign up in the app with name, email and password (`/api/auth/register`, `/api/auth/login`).
-Passwords are stored as salted hashes and login tokens only as SHA-256 hashes. The profile holds sex,
+Passwords are stored as salted hashes and login tokens only as SHA-256 hashes. After 10 wrong passwords
+in 15 minutes (per IP or per email) login answers `429`; the dashboard login has the same limit per IP. The profile holds sex,
 age, height, weight (every change is kept as history), activity, goal, a profile photo, and BMI and
 daily calorie target are calculated from it. Meal photos a signed-in user takes in the app are kept
 in their gallery, and their meal plan is tied to their account.
@@ -103,7 +104,7 @@ blocked this file"), convert the model once on Google Colab with `convert_to_onn
 
 | Variable | Default |
 |---|---|
-| `NUTRIGO_ADMIN_PASSWORD` | `123456789` (public in the code: set your own before going online) |
+| `NUTRIGO_ADMIN_PASSWORD` | random per start, printed in the console (set your own to keep it) |
 | `NUTRIGO_SECRET_KEY` | random per start (admins are logged out on restart) |
 | `NUTRIGO_MODEL` | `auto` (Swin 101 dishes) — or `swin`, `onnx`, `keras`, `vit`, `none` |
 | `NUTRIGO_DB` | `backend/instance/nutrigo.db` |

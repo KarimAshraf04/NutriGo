@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "sh deploy/vercel_fetch_model.sh",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "includeFiles": "{backend/**,data/*.csv}",
+      "excludeFiles": "{backend/tests/**,backend/instance/**,backend/.venv/**,backend/models/food_model.*,backend/models/swin_food101/model.onnx}"
+    }
+  }
+}

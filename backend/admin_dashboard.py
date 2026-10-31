@@ -75,12 +75,18 @@ def format_ts(ts):
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        key = "admin-ip:" + str(request.remote_addr)
+        wait = state().throttle.retry_after(key)
+        if wait:
+            flash(f"Too many wrong passwords. Try again in {wait // 60 + 1} minutes.")
+            return render_template("admin/login.html"), 429
         given = request.form.get("password", "").encode()
         if hmac.compare_digest(given, state().admin_password.encode()):
             session.clear()
             session.update(admin=True, csrf=secrets.token_hex(16))
             nxt = request.args.get("next", "")
             return redirect(nxt if nxt.startswith("/admin") else url_for("admin.overview"))
+        state().throttle.fail(key)
         flash("Wrong password.")
     return render_template("admin/login.html")
 
@@ -244,7 +250,15 @@ def delete_food(table, food_id):
     rows = table_or_404(table)
     if table == "foods":
         abort(400, "Dishes are Food-101 classes and can only be edited, not deleted.")
-    if food_id in rows:
+    if food_id not in rows:
+        return redirect(url_for("admin.foods", table=table))
+    # plans point at their meals by food_id: deleting one in use would break every plan that has it
+    n_plans = state().plans.execute("SELECT COUNT(DISTINCT user_id) FROM plan_meals WHERE food_id = ?",
+                                    (food_id,))[0][0]
+    if n_plans:
+        flash(f"{rows[food_id]['name']} is in {n_plans} meal plan(s) and cannot be deleted; edit it instead.",
+              "error")
+    else:
         state().store.delete(table, food_id)
         state().images.delete(food_id)
         flash(f"Deleted {rows[food_id]['name']}.")
@@ -352,13 +366,23 @@ def plan_detail(user_id):
 
 # ---------- app users ----------
 
-def user_rows(q=""):
+SIGNED_IN = "EXISTS (SELECT 1 FROM user_tokens t WHERE t.user_id = u.id AND t.expires > ?)"
+HAS_PLAN = "EXISTS (SELECT 1 FROM plans WHERE plans.user_id = u.id)"
+USER_SHOWS = {"": "Everyone", "signed_in": "Signed in", "no_plan": "Need a plan"}
+
+
+def user_rows(q="", show=""):
     sql = ("SELECT u.*, (SELECT COUNT(*) FROM user_photos p WHERE p.user_id = u.id) AS n_photos, "
-           "EXISTS (SELECT 1 FROM plans WHERE plans.user_id = u.id) AS has_plan FROM users u")
-    args = ()
+           f"{HAS_PLAN} AS has_plan, {SIGNED_IN} AS signed_in FROM users u WHERE 1=1")
+    args = [time.time()]
     if q:
-        sql += " WHERE lower(u.name) LIKE ? OR lower(u.email) LIKE ?"
-        args = (f"%{q.lower()}%", f"%{q.lower()}%")
+        sql += " AND (lower(u.name) LIKE ? OR lower(u.email) LIKE ?)"
+        args += [f"%{q.lower()}%", f"%{q.lower()}%"]
+    if show == "signed_in":
+        sql += f" AND {SIGNED_IN}"
+        args.append(time.time())
+    elif show == "no_plan":
+        sql += f" AND NOT {HAS_PLAN}"
     return [dict(r) for r in state().users.execute(sql + " ORDER BY u.last_seen DESC LIMIT 500", args)]
 
 
@@ -366,14 +390,22 @@ def user_rows(q=""):
 def users_list():
     import users as accounts
     q = request.args.get("q", "").strip()
-    rows = user_rows(q)
+    show = request.args.get("show", "")
+    show = show if show in USER_SHOWS else ""
+    rows = user_rows(q, show)
     for r in rows:
         r["bmi"], r["bmi_label"] = accounts.bmi(r["height_cm"], r["weight_kg"])
-    week = time.time() - 7 * 86400
+    now = time.time()
+    week = now - 7 * 86400
     stats = state().users.execute(
-        "SELECT COUNT(*), SUM(created >= ?), SUM(last_seen >= ?), AVG(weight_kg), AVG(height_cm) FROM users",
-        (week, week))[0]
-    return render_template("admin/users.html", rows=rows, q=q, stats=stats)
+        "SELECT COUNT(*), SUM(created >= ?), SUM(last_seen >= ?), AVG(weight_kg), AVG(height_cm), "
+        f"COALESCE(SUM({SIGNED_IN}), 0), COALESCE(SUM(NOT {HAS_PLAN}), 0) FROM users u",
+        (week, week, now))[0]
+    events = state().users.execute(
+        "SELECT e.ts, e.event, u.id, u.name, u.email FROM user_events e JOIN users u ON u.id = e.user_id "
+        "ORDER BY e.id DESC LIMIT 30")
+    return render_template("admin/users.html", rows=rows, q=q, show=show, shows=USER_SHOWS, stats=stats,
+                           events=events)
 
 
 @bp.get("/users/<uid>")

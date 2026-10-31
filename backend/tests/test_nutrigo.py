@@ -1,4 +1,4 @@
-"""35 unit tests for the recommender, the Flutter API, the meal plan and the admin dashboard.  Run:  pytest -q  (from backend/)"""
+"""40 unit tests for the recommender, the Flutter API, the meal plan and the admin dashboard.  Run:  pytest -q  (from backend/)"""
 import io
 import os
 import shutil
@@ -503,3 +503,57 @@ def test_34_change_password_logs_out_other_devices(client):
 def test_35_links_use_https_behind_a_tunnel(client):
     r = client.get("/api/foods?q=pizza", headers={"X-Forwarded-Proto": "https", "Host": "abc.ngrok-free.app"})
     assert r.get_json()["foods"][0]["image_url"].startswith("https://abc.ngrok-free.app/api/images/pizza")
+
+
+def test_36_swap_used_in_a_plan_cannot_be_deleted(admin):
+    plan = admin.post("/api/plans", json={"user_id": USER, "kcal_target": 2000}).get_json()
+    alts = admin.app.extensions["nutrigo"].store.alternatives
+    used = next(m["food"]["food_id"] for d in plan["days"] for m in d["meals"] if m["food"]["food_id"] in alts)
+    r = admin.post(f"/admin/foods/alternatives/{used}/delete", data={"csrf": admin.csrf}, follow_redirects=True)
+    assert r.status_code == 200 and b"cannot be deleted" in r.data and used in alts
+    assert admin.get(f"/api/plans/{USER}").status_code == 200
+
+
+def test_37_daily_target_stays_sensible_at_the_extremes(client):
+    from flutter_api import daily_target
+    heavy = daily_target("female", 60, 120, 150, "sedentary", "lose_weight")
+    assert heavy["fat_g"] * 9 >= 0.19 * heavy["kcal"] and heavy["protein_g"] < 120
+    assert abs(heavy["protein_g"] * 4 + heavy["carbs_g"] * 4 + heavy["fat_g"] * 9 - heavy["kcal"]) <= 15
+    small = daily_target("male", 80, 45, 150, "sedentary", "lose_weight")
+    assert small["kcal"] <= small["tdee"]  # the 1500 kcal floor never goes above maintenance
+    big = daily_target("male", 22, 110, 190, "very_active", "balanced")
+    assert big["kcal"] > 3000 and big["plan_kcal"] == 3000
+    assert client.post("/api/plans", json={"user_id": USER, "kcal_target": big["plan_kcal"]}).status_code == 201
+
+
+def test_38_repeated_wrong_passwords_are_throttled(client):
+    sign_up(client)
+    for _ in range(10):
+        assert client.post("/api/auth/login", json={"email": OMAR["email"], "password": "wrong-pass"}).status_code == 401
+    r = client.post("/api/auth/login", json={"email": OMAR["email"], "password": OMAR["password"]})
+    assert r.status_code == 429 and int(r.headers["Retry-After"]) > 0
+    for _ in range(10):
+        client.post("/admin/login", data={"password": "wrong"})
+    assert client.post("/admin/login", data={"password": ADMIN_PASSWORD}).status_code == 429
+
+
+def test_39_no_fixed_admin_password(tmp_path, monkeypatch):
+    monkeypatch.delenv("NUTRIGO_ADMIN_PASSWORD", raising=False)
+    app = create_app(predictor=KerasPredictor("food_model.keras", LABELS_JSON, model=FakeResNet()),
+                     db_path=str(tmp_path / "log.db"), image_dir=str(tmp_path / "img"), media_dir=str(tmp_path / "m"))
+    assert app.extensions["nutrigo"].admin_password not in ("", "123456789")
+    assert app.test_client().post("/admin/login", data={"password": "123456789"}).status_code == 200
+
+
+def test_40_dashboard_shows_sign_ins_and_who_needs_a_plan(admin):
+    h, user = sign_up(admin)
+    row = f'/admin/users/{user["id"]}" style="color: inherit;"'  # the user's row in the table, not the history
+    page = admin.get("/admin/users").get_data(as_text=True)
+    assert "Signed up" in page and "Signed in" in page
+    assert row in admin.get("/admin/users?show=no_plan").get_data(as_text=True)
+    admin.post("/api/plans", json={"kcal_target": 1800}, headers=h)
+    assert row not in admin.get("/admin/users?show=no_plan").get_data(as_text=True)
+    assert row in admin.get("/admin/users?show=signed_in").get_data(as_text=True)
+    assert admin.post("/api/auth/logout", headers=h).status_code == 200
+    assert "Logged out" in admin.get("/admin/users").get_data(as_text=True)
+    assert row not in admin.get("/admin/users?show=signed_in").get_data(as_text=True)

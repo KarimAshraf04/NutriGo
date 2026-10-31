@@ -91,3 +91,44 @@ class RequestLog:
             "INSERT INTO requests (ts, endpoint, status, ms, food_id, confidence, low_conf, goal, n_swaps)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (time.time(), endpoint, status, ms, food_id, confidence, low_conf, goal, n_swaps))
+
+
+class LoginThrottle:
+    """Failed sign-ins per key (IP, email) in memory: after `limit` failures within `window` seconds
+    the key is blocked until the oldest failure is that old. A successful sign-in clears the key."""
+
+    def __init__(self, limit=10, window=15 * 60):
+        self.limit, self.window = limit, window
+        self.lock = threading.Lock()
+        self.failures = {}
+
+    def _recent(self, key, now):
+        times = [t for t in self.failures.get(key, []) if now - t < self.window]
+        if times:
+            self.failures[key] = times
+        else:
+            self.failures.pop(key, None)
+        return times
+
+    def retry_after(self, *keys):
+        """Seconds until these keys may try again (0 = allowed now)."""
+        now = time.time()
+        with self.lock:
+            recent = [self._recent(k, now) for k in keys]
+        waits = [self.window - (now - times[0]) for times in recent if len(times) >= self.limit]
+        return int(max(waits)) + 1 if waits else 0
+
+    def fail(self, *keys):
+        now = time.time()
+        with self.lock:
+            if len(self.failures) > 10000:  # many different keys: drop the stale ones
+                for key in list(self.failures):
+                    self._recent(key, now)
+            for key in keys:
+                self.failures.setdefault(key, []).append(now)
+                self._recent(key, now)
+
+    def clear(self, *keys):
+        with self.lock:
+            for key in keys:
+                self.failures.pop(key, None)

@@ -39,9 +39,9 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pytest -q                             # 35 tests
+python -m pytest -q                             # 39 tests
 python evaluate.py                              # recommender numbers for slide 11
-$env:NUTRIGO_ADMIN_PASSWORD = "123456789"
+$env:NUTRIGO_ADMIN_PASSWORD = "choose-a-password"
 python app.py                                   # http://localhost:5000 opens the admin dashboard
 ```
 

@@ -5,7 +5,7 @@
 // Contract: NutriGo_API_for_Flutter.md (same folder).
 //
 // Example:
-//   final api = NutriGoApi('http://10.0.2.2:5000');       // Android emulator
+//   final api = NutriGoApi('https://nutrigo-tau.vercel.app');  // hosted (or http://10.0.2.2:5000 for a local PC)
 //   final result = await api.predict(File(photo.path), goal: 'lose_weight');
 //   Image.network(result.swaps.first.imageUrl);           // photo of the first swap
 //
@@ -15,7 +15,7 @@
 //   // later: await api.login(email, password);  // api.token is set again
 //
 // Meal plan of the signed-in user ('me'):
-//   var plan = await api.createPlan('me', kcalTarget: user.dailyTarget!.kcal, goal: 'lose_weight');
+//   var plan = await api.createPlan('me', kcalTarget: user.dailyTarget!.planKcal, goal: 'lose_weight');
 //   plan.days[0].meal('lunch').food.name;                 // Day 1 lunch
 //   final s = await api.mealSwaps('me', 1, 'lunch');      // swaps sized to the lunch budget
 //   final day1 = await api.replaceMeal('me', 1, 'lunch', s.swaps.first.id);  // day stays on target
@@ -145,12 +145,16 @@ class RecommendResult {
 class DailyTarget {
   DailyTarget.fromJson(Map<String, dynamic> j)
       : kcal = (j['kcal'] as num).toInt(),
+        planKcal = ((j['plan_kcal'] ?? j['kcal']) as num).toInt(),
         proteinG = (j['protein_g'] as num).toInt(),
         carbsG = (j['carbs_g'] as num).toInt(),
         fatG = (j['fat_g'] as num).toInt(),
         bmr = (j['bmr'] as num).toInt(),
         tdee = (j['tdee'] as num).toInt();
   final int kcal, proteinG, carbsG, fatG, bmr, tdee;
+
+  /// `kcal` kept inside 1200-3000: use this as kcalTarget for createPlan / updatePlan.
+  final int planKcal;
 }
 
 // ---------- accounts ----------

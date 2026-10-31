@@ -27,3 +27,6 @@ Thumbs.db
 
 # local clone of the Hugging Face Space (upload Space files from deploy/huggingface/ instead)
 nutrigo/
+
+.vercel
+.env*

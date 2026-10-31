@@ -47,6 +47,7 @@ LOW_CONFIDENCE = 0.60
 MAX_LIMIT = 10
 PREDICT_SWAPS = 4
 NOT_LOGGED = {"food_image", "my_avatar", "my_photo"}
+MIN_FAT_SHARE = 0.20
 ACTIVITY = {"sedentary": 1.2, "light": 1.375, "moderate": 1.55, "active": 1.725, "very_active": 1.9}
 
 bp = Blueprint("flutter_api", __name__, url_prefix="/api")
@@ -242,16 +243,25 @@ def target():
 
 
 def daily_target(sex, age, w, h, activity="light", goal="balanced"):
-    """Mifflin-St Jeor BMR x activity, -500 kcal to lose weight, plus protein / carb / fat grams."""
+    """Mifflin-St Jeor BMR x activity, -500 kcal to lose weight, plus protein / carb / fat grams.
+
+    The 1500 / 1200 kcal floor never puts a weight-loss target above maintenance. Protein is per kg of
+    a healthy weight (BMI 25 at most) and fat is at least 20 % of the kcal, carbs take what is left.
+    plan_kcal is kcal kept inside the range POST /api/plans accepts."""
     bmr = 10 * w + 6.25 * h - 5 * age + (5 if sex == "male" else -161)
     tdee = bmr * ACTIVITY[activity]
-    kcal = tdee - 500 if goal == "lose_weight" else tdee
-    kcal = max(kcal, 1500 if sex == "male" else 1200)
-    protein = w * (1.6 if goal in ("high_protein", "lose_weight") else 1.0)
+    floor = 1500 if sex == "male" else 1200
+    kcal = max(tdee - 500, min(floor, tdee)) if goal == "lose_weight" else max(tdee, floor)
+    ref_w = min(w, 25 * (h / 100) ** 2)
+    protein = ref_w * (1.6 if goal in ("high_protein", "lose_weight") else 1.0)
     carb_share = 0.25 if goal == "low_carb" else 0.50
     carbs = kcal * carb_share / 4
-    fat = max((kcal - protein * 4 - carbs * 4) / 9, 0)
-    return {"bmr": round(bmr), "tdee": round(tdee), "kcal": round(kcal),
+    fat = (kcal - protein * 4 - carbs * 4) / 9
+    if fat < kcal * MIN_FAT_SHARE / 9:
+        fat = kcal * MIN_FAT_SHARE / 9
+        carbs = max((kcal - protein * 4 - fat * 9) / 4, 0)
+    lo, hi = plans.KCAL_RANGE
+    return {"bmr": round(bmr), "tdee": round(tdee), "kcal": round(kcal), "plan_kcal": round(min(max(kcal, lo), hi)),
             "protein_g": round(protein), "carbs_g": round(carbs), "fat_g": round(fat), "goal": goal}
 
 
@@ -610,23 +620,35 @@ def register():
     if state().users.by_email(email):
         return error("an account with this email already exists; log in instead", 409)
     uid = state().users.create(email, profile.pop("name"), password, profile)
+    state().users.log_event(uid, "register")
     return auth_json(uid, 201)
 
 
 @bp.post("/auth/login")
 def login():
     body = request.get_json(silent=True) or {}
-    user = state().users.by_email(str(body.get("email", "")).strip())
+    email = str(body.get("email", "")).strip().lower()
+    keys = ("api-ip:" + str(request.remote_addr), "api-email:" + email)
+    wait = state().throttle.retry_after(*keys)
+    if wait:
+        resp = error(f"too many failed sign-ins; try again in {wait // 60 + 1} minutes", 429)
+        resp[0].headers["Retry-After"] = str(wait)
+        return resp
+    user = state().users.by_email(email)
     if user is None or not state().users.check_password(user, str(body.get("password", ""))):
+        state().throttle.fail(*keys)
         return error("wrong email or password", 401)
+    state().throttle.clear(keys[1])
+    state().users.log_event(user["id"], "login")
     return auth_json(user["id"])
 
 
 @bp.post("/auth/logout")
 def logout():
-    auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        state().users.revoke(auth[7:].strip())
+    uid = token_user()
+    if uid:
+        state().users.revoke(request.headers["Authorization"][7:].strip())
+        state().users.log_event(uid, "logout")
     return jsonify({"logged_out": True})
 
 

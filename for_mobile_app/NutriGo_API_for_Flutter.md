@@ -6,7 +6,20 @@ Two files to use in the app:
 
 ## Connect
 
-Start the backend on the PC (`python app.py` in `backend/`). It listens on port 5000 on every network card.
+The backend is hosted at **`https://nutrigo-tau.vercel.app`** — use that as `baseUrl` from any phone,
+emulator or web build. Check it first: `GET https://nutrigo-tau.vercel.app/api/status` → `"model_ready": true`.
+
+Hosted on Vercel (free demo hosting), so:
+- **Saved data can reset**: accounts, plans and meal photos may disappear between requests or after the server
+  has been idle. If `GET /api/me` answers `401` with a token that worked before, send the user to log in /
+  sign up again; if `GET /api/plans/me` answers `404`, create the plan again. Recognition, foods, swaps and
+  targets need no saved data and always work.
+- **Photos must be under 4.5 MB** (Vercel rejects bigger uploads with `413`). Shrink them when picking:
+  `ImagePicker().pickImage(source: ImageSource.camera, maxWidth: 1600, imageQuality: 85)`.
+- **The first call after an idle period takes a few seconds** while the model loads; show a spinner and keep the
+  client's 30 s timeout.
+
+To run the backend on your own PC instead (`python app.py` in `backend/`, port 5000):
 
 | Where the app runs | `baseUrl` |
 |---|---|
@@ -15,8 +28,9 @@ Start the backend on the PC (`python app.py` in `backend/`). It listens on port 
 | Real phone (same Wi-Fi as the PC) | `http://<PC IP>:5000` — find the IP with `ipconfig` (IPv4 Address) |
 | Any phone, anywhere (ngrok tunnel) | the `https://….ngrok-free.app` address ngrok prints (changes on every ngrok start unless you claim a free static domain) |
 
-Android: add `<uses-permission android:name="android.permission.INTERNET"/>` and, because the API is
-plain HTTP, `android:usesCleartextTraffic="true"` on `<application>` in `AndroidManifest.xml`.
+Android: always add `<uses-permission android:name="android.permission.INTERNET"/>` to `AndroidManifest.xml`
+(release builds have no internet without it). Only for a local PC, because it is plain HTTP, also add
+`android:usesCleartextTraffic="true"` on `<application>`; the Vercel address is https and needs nothing else.
 On the PC, allow Python through Windows Firewall when asked, or a real phone cannot connect.
 
 With ngrok, every request must carry the header `ngrok-skip-browser-warning: true`, otherwise ngrok
@@ -24,6 +38,31 @@ answers with an HTML warning page instead of JSON (`nutrigo_api.dart` sends it).
 so no cleartext setting is needed for them.
 
 Check the connection first: `GET /api/status` → `"model_ready": true`.
+
+## What the app must do (so the admin dashboard sees every user)
+
+The admin dashboard (`/admin/users`) lists every account, who is **signed in** or **logged out**, a history of
+sign-ups, logins and logouts, who **needs a plan**, and each person's profile, weight, photos and 7-day plan.
+It only knows what the app sends, so the app must use accounts — not anonymous ids:
+
+1. **Start-up.** `api = NutriGoApi(baseUrl, token: <token saved in flutter_secure_storage>)`. If there is a saved
+   token, call `api.me()`: success → go to Home; `401` → delete the saved token and show Login.
+2. **Sign up** (`api.register(...)`) with name, email, password, and ask for sex, age, height, weight, activity
+   and goal in the same form or right after (`api.updateMe({...})`). Without them there is no `daily_target`.
+   → dashboard: *Signed up*, *Signed in*.
+3. **Log in** (`api.login(email, password)`) → save `api.token` in `flutter_secure_storage`.
+   → dashboard: *Logged in*, *Signed in*. Handle `401` (wrong password) and `429` (too many tries: wait).
+4. **Plan.** After sign-up / login call `api.plan('me')`. If it is `null` (no plan yet) show a
+   "Create my plan" button → `api.createPlan('me', kcalTarget: user.dailyTarget!.planKcal, goal: user.goal ?? 'balanced')`.
+   Until then the user shows under **Need a plan** in the dashboard. When the user edits weight, activity or
+   goal, call `api.updatePlan('me', kcalTarget: newUser.dailyTarget!.planKcal, goal: newUser.goal)`.
+5. **Every request after login carries the token** (`nutrigo_api.dart` adds it). Use `'me'` as the plan
+   user id, never a device id, so the plan belongs to the account. Each signed-in call updates *Last seen*.
+6. **Meal photos.** Use `api.predict(photo)` / `api.logMealPhoto('me', day, meal, photo)` while signed in, so the
+   photos land in the user's gallery and the dashboard.
+7. **Log out button** → `api.logout()`, then delete the saved token. → dashboard: *Logged out*.
+   (Just closing the app does not log out; tokens last 30 days.)
+8. **Privacy text.** Tell users that the NutriGo team can see their profile, photos and plan.
 
 ## Photos (`image_url`)
 
@@ -101,7 +140,11 @@ Kaggle fast-food menu is installed on the server. Call it again on every slider 
 ```json
 {"sex": "male", "age": 21, "weight_kg": 80, "height_cm": 178, "activity": "light", "goal": "lose_weight"}
 ```
-→ `{"kcal": 1992, "protein_g": 128, "carbs_g": 249, "fat_g": 54, "bmr": 1812, "tdee": 2492, "goal": "lose_weight"}`
+→ `{"kcal": 1992, "plan_kcal": 1992, "protein_g": 127, "carbs_g": 249, "fat_g": 54, "bmr": 1812, "tdee": 2492, "goal": "lose_weight"}`
+
+`plan_kcal` is `kcal` kept inside 1200–3000: send it as `kcal_target` to `POST /api/plans` (very active, heavy
+users can get a `kcal` above 3000, which the plan endpoints reject). Protein is per kg of a healthy weight
+(BMI 25 at most) and fat is at least 20 % of the kcal.
 
 `activity`: `sedentary | light | moderate | active | very_active` · `sex`: `male | female` ·
 `goal` as above · `age` 10–100, `weight_kg` 25–300, `height_cm` 100–250 (otherwise `400`).
@@ -131,7 +174,7 @@ still use a random id per install (6–64 letters, digits, `-` or `_`).
 | `POST /api/plans/<user_id>/<day>/<meal>/photo` multipart `image` (+ `portion`) | recognise what was eaten, put it in that meal → day + swaps |
 
 `day` is `1`–`7`; `meal` is `breakfast | lunch | dinner | snack`. Get `kcal_target` from
-`POST /api/target` (its `kcal`), or let the user type it; it must be 1200–3000.
+`POST /api/target` (its `plan_kcal`), or let the user type it; it must be 1200–3000.
 Plan portions go from 0.5× to 2.5× (e.g. 1.5 bowls), so the day can reach the target with light foods.
 
 ### Plan object
@@ -198,8 +241,8 @@ Tokens last 30 days; keep it with `flutter_secure_storage`, not plain shared pre
 | Endpoint | What it does |
 |---|---|
 | `POST /api/auth/register` `{name, email, password, sex?, age?, height_cm?, weight_kg?, activity?, goal?}` | new account → `{token, user}`, status `201`; `409` if the email exists; password ≥ 8 characters |
-| `POST /api/auth/login` `{email, password}` | → `{token, user}`; `401` "wrong email or password" |
-| `POST /api/auth/logout` | ends this token |
+| `POST /api/auth/login` `{email, password}` | → `{token, user}`; `401` "wrong email or password"; after 10 wrong tries in 15 min `429` with `Retry-After` (seconds) |
+| `POST /api/auth/logout` | ends this token (shown as *Logged out* in the dashboard) |
 | `POST /api/me/password` `{current_password, new_password}` | new password → `{token, user}`; every other device is logged out; `401` if the current password is wrong |
 | `GET /api/me` | the user (below) |
 | `PATCH /api/me` `{name?, sex?, age?, height_cm?, weight_kg?, activity?, goal?}` | update the profile → user; every new weight is kept as history |
@@ -214,10 +257,10 @@ User object:
 {"id": "239abcef…", "email": "omar@example.com", "name": "Omar", "sex": "male", "age": 21,
  "height_cm": 178, "weight_kg": 78, "activity": "light", "goal": "lose_weight",
  "bmi": 24.6, "bmi_label": "Healthy",
- "daily_target": {"kcal": 1980, "protein_g": 125, "carbs_g": 248, "fat_g": 55, "bmr": 1792, "tdee": 2464},
+ "daily_target": {"kcal": 1965, "plan_kcal": 1965, "protein_g": 125, "carbs_g": 246, "fat_g": 54, "bmr": 1792, "tdee": 2465},
  "avatar_url": "http://…/api/me/avatar", "has_plan": true, "created": 1793277000.5}
 ```
-`daily_target` is null until sex, age, height and weight are filled in; use its `kcal` for
+`daily_target` is null until sex, age, height and weight are filled in; use its `plan_kcal` for
 `POST /api/plans`. Ranges: `age` 10–100, `height_cm` 100–250, `weight_kg` 25–300.
 
 **Meal photos** of a signed-in user are kept in their gallery: `/api/predict` (its answer has
@@ -232,5 +275,6 @@ Every error is JSON `{"error": "message"}` with status `400`, `401` (sign in), `
 
 ## Admin dashboard (not for the app)
 
-`http://<PC>:5000/admin` — for the team: users and their profiles, usage numbers, editing the food data, uploading the swap
-photos, testing a photo. Admins log in with the password set on the server.
+`https://nutrigo-tau.vercel.app/admin` (or `http://<PC>:5000/admin`) — for the team: users, who is signed in,
+sign-in history, who needs a plan, profiles, usage numbers, editing the food data, uploading the swap photos,
+testing a photo. Admins log in with the password set on the server.
