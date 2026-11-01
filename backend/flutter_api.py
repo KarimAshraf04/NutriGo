@@ -627,7 +627,10 @@ def register():
     profile, bad = parse_profile(body, require_name=True)
     if bad:
         return bad
-    if state().users.by_email(email):
+    existing = state().users.by_email(email)
+    if existing:
+        if not existing["password_hash"] and existing.get("google_sub"):
+            return error("this email already has an account made with Google; use the Google button to sign in", 409)
         return error("an account with this email already exists; log in instead", 409)
     uid = state().users.create(email, profile.pop("name"), password, profile)
     state().users.log_event(uid, "register")
@@ -645,6 +648,9 @@ def login():
         resp[0].headers["Retry-After"] = str(wait)
         return resp
     user = state().users.by_email(email)
+    if user is not None and not user["password_hash"] and user.get("google_sub"):
+        # made with Google and no password set yet: say so instead of "wrong password"
+        return error("this account was made with Google; use the Google button to sign in", 401)
     if user is None or not state().users.check_password(user, str(body.get("password", ""))):
         state().throttle.fail(*keys)
         return error("wrong email or password", 401)

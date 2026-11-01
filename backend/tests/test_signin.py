@@ -56,3 +56,19 @@ def test_goal_and_start_weight(client):  # noqa: F811
     u = client.patch("/api/me", headers=h, json={"weight_kg": 87}).get_json()
     assert u["weight_kg"] == 87 and u["start_weight_kg"] == 90
     assert client.patch("/api/me", headers=h, json={"goal_weight_kg": 10}).status_code == 400
+
+
+def test_google_account_password_login_says_use_google(client, monkeypatch):  # noqa: F811
+    import users
+    monkeypatch.setattr(users, "verify_google_id_token", lambda t, ids: {
+        "sub": "g-1", "email": "mo@gmail.com", "email_verified": "true", "name": "Mo"})
+    client.application.extensions["nutrigo"].google_client_ids = {"web"}
+    assert client.post("/api/auth/google", json={"id_token": "t"}).status_code == 201
+    r = client.post("/api/auth/login", json={"email": "mo@gmail.com", "password": "secret123"})
+    assert r.status_code == 401 and "Google" in r.get_json()["error"]
+    r = client.post("/api/auth/register", json={"name": "Mo", "email": "mo@gmail.com", "password": "secret123"})
+    assert r.status_code == 409 and "Google" in r.get_json()["error"]
+    r = client.post("/api/auth/register", json={"name": "A", "email": "a@x.co", "password": "secret123"})
+    assert client.post("/api/auth/register", json={"name": "A", "email": "a@x.co",
+                                                   "password": "secret123"}).get_json()["error"].endswith("log in instead")
+
