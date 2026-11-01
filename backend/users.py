@@ -1,6 +1,7 @@
-"""App accounts: email + password sign-in, profile, profile photo, meal-photo gallery, weight history.
+"""App accounts: email + password or Google sign-in, profile, profile photo, meal-photo gallery, weight history.
 
-Passwords are stored as salted hashes (werkzeug scrypt/pbkdf2), never in plain text. Login gives a
+Passwords are stored as salted hashes (werkzeug scrypt/pbkdf2), never in plain text. Google accounts
+have no password (empty hash, so password login fails) until the user sets one. Login gives a
 random token; only its SHA-256 is stored, so a copy of the database cannot be used to sign in.
 Profile and meal photos are personal data: they live in backend/instance/user_media/<user_id>/
 (not under static/), and are served only to their owner (token) or to a logged-in admin.
@@ -9,12 +10,16 @@ Deleting an account removes the profile, tokens, photos, weight history and meal
 import contextlib
 import hashlib
 import io
+import json
 import os
 import re
 import secrets
 import shutil
 import sqlite3
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -24,6 +29,27 @@ TOKEN_DAYS = 30
 PROFILE_FIELDS = ("name", "sex", "age", "height_cm", "weight_kg", "activity", "goal")
 LIMITS = {"age": (10, 100), "height_cm": (100, 250), "weight_kg": (25, 300)}
 PHOTO_SIDE = 800
+GOOGLE_TOKENINFO = "https://oauth2.googleapis.com/tokeninfo"
+GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+
+
+def verify_google_id_token(id_token, client_ids):
+    """Claims (sub, email, name, ...) of a Google ID token from the app's Google Sign-In, or None.
+
+    Google's tokeninfo endpoint checks the signature and expiry (no extra package needed); here we
+    check it was made for one of our OAuth client ids, by Google, for a verified email.
+    Raises OSError when Google cannot be reached."""
+    url = GOOGLE_TOKENINFO + "?" + urllib.parse.urlencode({"id_token": id_token})
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            claims = json.load(resp)
+    except urllib.error.HTTPError:  # 400: invalid or expired token
+        return None
+    if claims.get("aud") not in client_ids or claims.get("iss") not in GOOGLE_ISSUERS:
+        return None
+    if str(claims.get("email_verified")).lower() != "true" or not claims.get("sub") or not claims.get("email"):
+        return None
+    return claims
 
 
 def bmi(height_cm, weight_kg):
@@ -68,6 +94,10 @@ class UserStore:
         # sign-up / sign-in / sign-out history for the dashboard (no IPs, no devices)
         self.execute("""CREATE TABLE IF NOT EXISTS user_events (
             id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, event TEXT)""")
+        # Google account id ("sub") of users who sign in with Google; added to older databases too
+        if "google_sub" not in {r["name"] for r in self.execute("PRAGMA table_info(users)")}:
+            self.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+        self.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users (google_sub)")
 
     def execute(self, sql, args=()):
         with contextlib.closing(sqlite3.connect(self.path)) as conn:
@@ -78,14 +108,16 @@ class UserStore:
 
     # ---------- accounts ----------
 
-    def create(self, email, name, password, profile):
+    def create(self, email, name, password, profile, google_sub=None):
+        """New account; password None for a Google-only account."""
         now = time.time()
         uid = secrets.token_hex(16)
         fields = {k: profile.get(k) for k in PROFILE_FIELDS if k != "name"}
         self.execute("INSERT INTO users (id, email, name, password_hash, sex, age, height_cm, weight_kg, activity, goal, "
-                     "created, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                     (uid, email.lower(), name, generate_password_hash(password), fields["sex"], fields["age"],
-                      fields["height_cm"], fields["weight_kg"], fields["activity"], fields["goal"], now, now))
+                     "created, last_seen, google_sub) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (uid, email.lower(), name, generate_password_hash(password) if password else "", fields["sex"],
+                      fields["age"], fields["height_cm"], fields["weight_kg"], fields["activity"], fields["goal"],
+                      now, now, google_sub))
         if fields["weight_kg"]:
             self.execute("INSERT INTO user_weights (user_id, ts, weight_kg) VALUES (?, ?, ?)",
                          (uid, now, fields["weight_kg"]))
@@ -95,6 +127,13 @@ class UserStore:
         rows = self.execute("SELECT * FROM users WHERE email = ?", (email.lower(),))
         return dict(rows[0]) if rows else None
 
+    def by_google(self, google_sub):
+        rows = self.execute("SELECT * FROM users WHERE google_sub = ?", (google_sub,))
+        return dict(rows[0]) if rows else None
+
+    def link_google(self, uid, google_sub):
+        self.execute("UPDATE users SET google_sub = ? WHERE id = ?", (google_sub, uid))
+
     def get(self, uid):
         rows = self.execute("SELECT * FROM users WHERE id = ?", (uid,))
         return dict(rows[0]) if rows else None
@@ -103,7 +142,7 @@ class UserStore:
         return bool(self.execute("SELECT 1 FROM users WHERE id = ?", (uid,)))
 
     def check_password(self, user, password):
-        return check_password_hash(user["password_hash"], password)
+        return bool(user["password_hash"]) and check_password_hash(user["password_hash"], password)
 
     def update(self, uid, fields):
         if not fields:

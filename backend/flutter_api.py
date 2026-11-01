@@ -20,6 +20,7 @@
   Accounts (email + password; send "Authorization: Bearer <token>" afterwards):
   POST   /api/auth/register   {name, email, password, sex?, age?, height_cm?, weight_kg?, activity?, goal?}
   POST   /api/auth/login      {email, password}             -> {token, user}
+  POST   /api/auth/google     {id_token}  (from google_sign_in) -> {token, user}, 201 for a new account
   POST   /api/auth/logout
   GET    /api/me   PATCH /api/me {profile fields}   DELETE /api/me (account + plan + photos)
   POST   /api/me/password {current_password, new_password} -> new token (other devices logged out)
@@ -597,6 +598,7 @@ def profile_json(user):
         "activity": user["activity"], "goal": user["goal"], "bmi": value, "bmi_label": label,
         "daily_target": target,
         "avatar_url": url_for("flutter_api.my_avatar", _external=True) if user["has_avatar"] else None,
+        "google": bool(user["google_sub"]), "has_password": bool(user["password_hash"]),
         "has_plan": state().plans.get(user["id"])[0] is not None, "created": user["created"],
     }
 
@@ -643,6 +645,37 @@ def login():
     return auth_json(user["id"])
 
 
+@bp.post("/auth/google")
+def google_login():
+    """Sign in or sign up with the ID token the app got from Google Sign-In.
+    An existing account with the same (Google-verified) email is linked, not duplicated."""
+    client_ids = state().google_client_ids
+    if not client_ids:
+        return error("Google sign-in is not set up on the server (NUTRIGO_GOOGLE_CLIENT_IDS)", 503)
+    id_token = str((request.get_json(silent=True) or {}).get("id_token", "")).strip()
+    if not id_token:
+        return error("send the Google 'id_token' from google_sign_in")
+    try:
+        claims = users.verify_google_id_token(id_token, client_ids)
+    except OSError:
+        return error("could not reach Google to check the sign-in; try again", 502)
+    if claims is None:
+        return error("Google sign-in failed: the token is invalid, expired or made for another app", 401)
+    st = state().users
+    user = st.by_google(claims["sub"]) or st.by_email(claims["email"])
+    if user is not None:
+        if user["google_sub"] and user["google_sub"] != claims["sub"]:
+            return error("this email is linked to a different Google account", 409)
+        if not user["google_sub"]:
+            st.link_google(user["id"], claims["sub"])
+        st.log_event(user["id"], "login")
+        return auth_json(user["id"])
+    name = (claims.get("name") or claims["email"].split("@")[0]).strip()[:60] or "NutriGo user"
+    uid = st.create(claims["email"], name, None, {}, google_sub=claims["sub"])
+    st.log_event(uid, "register")
+    return auth_json(uid, 201)
+
+
 @bp.post("/auth/logout")
 def logout():
     uid = token_user()
@@ -679,7 +712,8 @@ def change_password():
     if bad:
         return bad
     body = request.get_json(silent=True) or {}
-    if not state().users.check_password(user, str(body.get("current_password", ""))):
+    # a Google account without a password can set its first one without a current password
+    if user["password_hash"] and not state().users.check_password(user, str(body.get("current_password", ""))):
         return error("current password is wrong", 401)
     new = str(body.get("new_password", ""))
     if len(new) < users.MIN_PASSWORD:

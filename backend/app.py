@@ -28,7 +28,7 @@ MAX_UPLOAD_MB = 10
 
 
 def create_app(predictor=None, data_dir=DATA_DIR, fastfood_path=None, db_path=None, admin_password=None,
-               image_dir=IMAGE_DIR, media_dir=None):
+               image_dir=IMAGE_DIR, media_dir=None, google_client_ids=None):
     app = Flask(__name__)
     # behind ngrok (or any HTTPS proxy) build image / avatar links with the https scheme the phone used
     from werkzeug.middleware.proxy_fix import ProxyFix
@@ -47,12 +47,17 @@ def create_app(predictor=None, data_dir=DATA_DIR, fastfood_path=None, db_path=No
         password = secrets.token_urlsafe(9)
         print(f"[admin] NUTRIGO_ADMIN_PASSWORD is not set; dashboard password for this run: {password}")
 
+    # OAuth client ids from Google Cloud that Google ID tokens may be made for (the Web client id the
+    # Flutter app passes as serverClientId; add the iOS one if iOS sends tokens without it), comma-separated
+    if google_client_ids is None:
+        google_client_ids = {c.strip() for c in os.environ.get("NUTRIGO_GOOGLE_CLIENT_IDS", "").split(",") if c.strip()}
+
     db_path = db_path or DEFAULT_DB
     app.extensions["nutrigo"] = SimpleNamespace(
         store=DataStore(data_dir, fastfood_path), images=ImageStore(image_dir),
         model=predictor if predictor is not None else load_predictor(),
         log=RequestLog(db_path), plans=PlanStore(db_path), users=UserStore(db_path, media_dir or DEFAULT_MEDIA),
-        admin_password=password, throttle=LoginThrottle())
+        admin_password=password, throttle=LoginThrottle(), google_client_ids=set(google_client_ids))
 
     app.register_blueprint(flutter_api.bp)
     app.register_blueprint(admin_dashboard.bp)

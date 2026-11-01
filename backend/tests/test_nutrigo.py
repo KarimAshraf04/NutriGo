@@ -1,4 +1,4 @@
-"""40 unit tests for the recommender, the Flutter API, the meal plan and the admin dashboard.  Run:  pytest -q  (from backend/)"""
+"""44 unit tests for the recommender, the Flutter API, the meal plan and the admin dashboard.  Run:  pytest -q  (from backend/)"""
 import io
 import os
 import shutil
@@ -385,7 +385,8 @@ def sign_up(c, **extra):
 def test_28_register_login_and_profile(client):
     h, user = sign_up(client)
     assert user["bmi"] == 25.2 and user["bmi_label"] == "Overweight" and user["daily_target"]["kcal"] > 1500
-    assert "password" not in str(user) and "password_hash" not in user
+    assert "password_hash" not in user and OMAR["password"] not in str(user) and "scrypt" not in str(user)
+    assert user["has_password"] is True and user["google"] is False
     assert client.post("/api/auth/register", json=dict(OMAR, email="OMAR@example.com")).status_code == 409
     assert client.post("/api/auth/register", json=dict(OMAR, email="x@y.co", password="short")).status_code == 400
     assert client.post("/api/auth/register", json=dict(OMAR, email="not-an-email")).status_code == 400
@@ -557,3 +558,75 @@ def test_40_dashboard_shows_sign_ins_and_who_needs_a_plan(admin):
     assert admin.post("/api/auth/logout", headers=h).status_code == 200
     assert "Logged out" in admin.get("/admin/users").get_data(as_text=True)
     assert row not in admin.get("/admin/users?show=signed_in").get_data(as_text=True)
+
+
+def google_app(tmp_path, monkeypatch, claims_by_token):
+    """App with Google sign-in on; Google's check is replaced by a lookup table of fake tokens."""
+    import users
+    monkeypatch.setattr(users, "verify_google_id_token",
+                        lambda token, ids: claims_by_token.get(token) if "web-client" in ids else None)
+    app = create_app(predictor=KerasPredictor("food_model.keras", LABELS_JSON, model=FakeResNet()),
+                     db_path=str(tmp_path / "log.db"), admin_password=ADMIN_PASSWORD, image_dir=str(tmp_path / "img"),
+                     media_dir=str(tmp_path / "media"), google_client_ids={"web-client"})
+    return app.test_client()
+
+
+def test_41_google_sign_up_then_sign_in(tmp_path, monkeypatch):
+    sara = {"sub": "g-123", "email": "sara@gmail.com", "name": "Sara Ali", "email_verified": "true"}
+    c = google_app(tmp_path, monkeypatch, {"good": sara})
+    r = c.post("/api/auth/google", json={"id_token": "good"})
+    assert r.status_code == 201
+    user = r.get_json()["user"]
+    assert user["name"] == "Sara Ali" and user["email"] == "sara@gmail.com" and user["google"] and not user["has_password"]
+    h = {"Authorization": "Bearer " + r.get_json()["token"]}
+    assert c.get("/api/me", headers=h).status_code == 200
+    r2 = c.post("/api/auth/google", json={"id_token": "good"})
+    assert r2.status_code == 200 and r2.get_json()["user"]["id"] == user["id"]  # same account, not a new one
+    assert c.post("/api/auth/google", json={"id_token": "forged"}).status_code == 401
+    assert c.post("/api/auth/google", json={}).status_code == 400
+    # no password yet: email login fails, but the user can set a first password without a current one
+    assert c.post("/api/auth/login", json={"email": "sara@gmail.com", "password": "anything1"}).status_code == 401
+    assert c.post("/api/me/password", json={"new_password": "newsecret1"}, headers=h).status_code == 200
+    assert c.post("/api/auth/login", json={"email": "sara@gmail.com", "password": "newsecret1"}).status_code == 200
+
+
+def test_42_google_links_an_existing_email_account(tmp_path, monkeypatch):
+    c = google_app(tmp_path, monkeypatch, {
+        "omar": {"sub": "g-omar", "email": OMAR["email"], "name": "Omar G", "email_verified": "true"},
+        "other": {"sub": "g-other", "email": OMAR["email"], "name": "Omar 2", "email_verified": "true"}})
+    _, user = sign_up(c)
+    r = c.post("/api/auth/google", json={"id_token": "omar"})
+    assert r.status_code == 200 and r.get_json()["user"]["id"] == user["id"] and r.get_json()["user"]["google"]
+    assert c.post("/api/auth/google", json={"id_token": "other"}).status_code == 409
+    assert c.post("/api/auth/login", json={"email": OMAR["email"], "password": OMAR["password"]}).status_code == 200
+
+
+def test_43_google_sign_in_off_without_client_id(client):
+    assert client.post("/api/auth/google", json={"id_token": "x"}).status_code == 503
+
+
+def test_44_google_token_checks(monkeypatch):
+    import io as _io
+    import json as _json
+    import urllib.error
+
+    import users
+
+    def fake_urlopen(claims):
+        class Resp(_io.BytesIO):
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        return lambda url, timeout: Resp(_json.dumps(claims).encode())
+    good = {"aud": "web-client", "iss": "https://accounts.google.com", "sub": "1", "email": "a@b.co",
+            "email_verified": "true"}
+    monkeypatch.setattr(users.urllib.request, "urlopen", fake_urlopen(good))
+    assert users.verify_google_id_token("t", {"web-client"})["sub"] == "1"
+    assert users.verify_google_id_token("t", {"someone-else"}) is None  # token made for another app
+    for bad in ({"iss": "evil.com"}, {"email_verified": "false"}):
+        monkeypatch.setattr(users.urllib.request, "urlopen", fake_urlopen(dict(good, **bad)))
+        assert users.verify_google_id_token("t", {"web-client"}) is None
+
+    def rejected(url, timeout):
+        raise urllib.error.HTTPError(url, 400, "invalid_token", {}, None)
+    monkeypatch.setattr(users.urllib.request, "urlopen", rejected)
+    assert users.verify_google_id_token("t", {"web-client"}) is None

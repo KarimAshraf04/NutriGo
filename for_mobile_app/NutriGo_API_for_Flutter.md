@@ -47,7 +47,8 @@ It only knows what the app sends, so the app must use accounts — not anonymous
 
 1. **Start-up.** `api = NutriGoApi(baseUrl, token: <token saved in flutter_secure_storage>)`. If there is a saved
    token, call `api.me()`: success → go to Home; `401` → delete the saved token and show Login.
-2. **Sign up** (`api.register(...)`) with name, email, password, and ask for sex, age, height, weight, activity
+2. **Sign up** (`api.register(...)`) with name, email, password — or **Continue with Google**
+   (`api.loginWithGoogle(idToken)`, see *Sign in with Google*) — and ask for sex, age, height, weight, activity
    and goal in the same form or right after (`api.updateMe({...})`). Without them there is no `daily_target`.
    → dashboard: *Signed up*, *Signed in*.
 3. **Log in** (`api.login(email, password)`) → save `api.token` in `flutter_secure_storage`.
@@ -242,6 +243,7 @@ Tokens last 30 days; keep it with `flutter_secure_storage`, not plain shared pre
 |---|---|
 | `POST /api/auth/register` `{name, email, password, sex?, age?, height_cm?, weight_kg?, activity?, goal?}` | new account → `{token, user}`, status `201`; `409` if the email exists; password ≥ 8 characters |
 | `POST /api/auth/login` `{email, password}` | → `{token, user}`; `401` "wrong email or password"; after 10 wrong tries in 15 min `429` with `Retry-After` (seconds) |
+| `POST /api/auth/google` `{id_token}` | sign in **or** sign up with Google (see below) → `{token, user}`; `201` for a new account, `200` for an existing one; `401` bad token; `503` Google not set up on the server |
 | `POST /api/auth/logout` | ends this token (shown as *Logged out* in the dashboard) |
 | `POST /api/me/password` `{current_password, new_password}` | new password → `{token, user}`; every other device is logged out; `401` if the current password is wrong |
 | `GET /api/me` | the user (below) |
@@ -260,6 +262,10 @@ User object:
  "daily_target": {"kcal": 1965, "plan_kcal": 1965, "protein_g": 125, "carbs_g": 246, "fat_g": 54, "bmr": 1792, "tdee": 2465},
  "avatar_url": "http://…/api/me/avatar", "has_plan": true, "created": 1793277000.5}
 ```
+`google` is `true` for accounts that sign in with Google; `has_password` is `false` for a Google account
+that never set a password (then `POST /api/me/password` with only `new_password` sets the first one, so
+email + password login also works).
+
 `daily_target` is null until sex, age, height and weight are filled in; use its `plan_kcal` for
 `POST /api/plans`. Ranges: `age` 10–100, `height_cm` 100–250, `weight_kg` 25–300.
 
@@ -268,9 +274,52 @@ User object:
 them with `Image.network(url, headers: api.authHeaders)`. The admins can see users' profiles, photos
 and plans in the dashboard, so tell users this in the app's privacy text.
 
+## Sign in with Google
+
+The app signs the user in with Google, then sends Google's **ID token** to the server. The server asks Google
+whether the token is genuine and made for our app, then logs the user in. The first time it creates the account
+(name and email from Google); if an account with that email already exists (made with email + password), the
+Google sign-in is linked to it. It shows in the dashboard like any other sign-up / login, marked *Google*.
+
+**1. Google Cloud (once, by the project owner)** — https://console.cloud.google.com
+1. Create a project (or pick one) → **APIs & Services → OAuth consent screen**: app name *NutriGo*,
+   support email, *External*; add testers' Gmail addresses while it is in *Testing*.
+2. **Credentials → Create credentials → OAuth client ID**, three times:
+   - **Web application** → its client id is the `serverClientId` in Flutter **and** the server's
+     `NUTRIGO_GOOGLE_CLIENT_IDS`. (No redirect URIs needed.)
+   - **Android** → package name from `android/app/build.gradle` (`applicationId`) and the SHA-1 from
+     `cd android && ./gradlew signingReport` (debug key now; add the release / Play signing SHA-1 later).
+   - **iOS** (if you ship iOS) → the bundle id.
+3. Give the server the Web client id (from the `NutriGo` folder), then redeploy:
+   `vercel env add NUTRIGO_GOOGLE_CLIENT_IDS production` → paste `xxxx.apps.googleusercontent.com`.
+   Until that is set, `/api/auth/google` answers `503`.
+
+**2. Flutter** — `flutter pub add google_sign_in` (version 7):
+```dart
+import 'package:google_sign_in/google_sign_in.dart';
+
+const webClientId = 'xxxx.apps.googleusercontent.com'; // the *Web* client id, not the Android one
+
+Future<NutriGoUser> signInWithGoogle(NutriGoApi api) async {
+  await GoogleSignIn.instance.initialize(serverClientId: webClientId); // once, e.g. at start-up
+  final account = await GoogleSignIn.instance.authenticate();          // Google's account picker
+  final idToken = account.authentication.idToken;
+  if (idToken == null) throw Exception('Google gave no ID token: check serverClientId');
+  final user = await api.loginWithGoogle(idToken);  // api.token is set; save it like a normal login
+  return user;
+}
+```
+- iOS also needs the iOS client id: `initialize(clientId: '<iOS client id>', serverClientId: webClientId)`
+  and the reversed client id as a URL scheme in `ios/Runner/Info.plist` (see the google_sign_in README).
+- After the first Google sign-in the profile has no sex / age / height / weight: send the user to the
+  profile form (`api.updateMe`) before the plan, exactly like after `register`.
+- Log out: `api.logout()` **and** `GoogleSignIn.instance.signOut()`, so the next sign-in shows the account picker.
+- `401` from `/api/auth/google` usually means the token was made for another client id: `serverClientId`
+  must be the Web client id that is in `NUTRIGO_GOOGLE_CLIENT_IDS`.
+
 ## Errors
 
-Every error is JSON `{"error": "message"}` with status `400`, `401` (sign in), `403`, `404`, `409`, `413`, `500` or `503`.
+Every error is JSON `{"error": "message"}` with status `400`, `401` (sign in), `403`, `404`, `409`, `413`, `429`, `500`, `502` or `503`.
 `nutrigo_api.dart` turns them into a `NutriGoException` (`statusCode` + `message`).
 
 ## Admin dashboard (not for the app)

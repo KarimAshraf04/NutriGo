@@ -13,6 +13,10 @@
 //   final user = await api.register(name: 'Omar', email: 'omar@example.com', password: 'secret123',
 //       sex: 'male', age: 21, heightCm: 178, weightKg: 80, goal: 'lose_weight');
 //   // later: await api.login(email, password);  // api.token is set again
+//   // or with Google (flutter pub add google_sign_in):
+//   //   await GoogleSignIn.instance.initialize(serverClientId: '<Web client id>.apps.googleusercontent.com');
+//   //   final account = await GoogleSignIn.instance.authenticate();
+//   //   final user = await api.loginWithGoogle(account.authentication.idToken!);
 //
 // Meal plan of the signed-in user ('me'):
 //   var plan = await api.createPlan('me', kcalTarget: user.dailyTarget!.planKcal, goal: 'lose_weight');
@@ -175,7 +179,9 @@ class NutriGoUser {
         dailyTarget =
             j['daily_target'] == null ? null : DailyTarget.fromJson(j['daily_target'] as Map<String, dynamic>),
         avatarUrl = j['avatar_url'] as String?,
-        hasPlan = j['has_plan'] as bool? ?? false;
+        hasPlan = j['has_plan'] as bool? ?? false,
+        google = j['google'] as bool? ?? false,
+        hasPassword = j['has_password'] as bool? ?? true;
 
   final String id, email, name;
   final String? sex, activity, goal, bmiLabel;
@@ -187,6 +193,10 @@ class NutriGoUser {
   /// Private: Image.network(avatarUrl!, headers: api.authHeaders).
   final String? avatarUrl;
   final bool hasPlan;
+
+  /// Signs in with Google. Without a password (hasPassword false) changePassword('', newPassword)
+  /// sets a first one, so the user can also log in with email + password.
+  final bool google, hasPassword;
 }
 
 class MealPhoto {
@@ -464,6 +474,17 @@ class NutriGoApi {
         .post(_u('/api/auth/login'), headers: _jsonHeaders, body: jsonEncode({'email': email, 'password': password}))
         .timeout(timeout);
     return _signedIn(_decode(res));
+  }
+
+  /// Sign in or sign up with Google. [idToken] comes from the google_sign_in package
+  /// (account.authentication.idToken, with serverClientId = the Web client id the server knows).
+  /// A new account is made the first time; an account with the same email is linked.
+  /// Throws NutriGoException(401) for a bad token, 503 when the server has no Google client id.
+  Future<NutriGoUser> loginWithGoogle(String idToken) async {
+    final res = await _http
+        .post(_u('/api/auth/google'), headers: _jsonHeaders, body: jsonEncode({'id_token': idToken}))
+        .timeout(timeout);
+    return _signedIn(_decode(res, ok: res.statusCode == 201 ? 201 : 200));
   }
 
   Future<void> logout() async {

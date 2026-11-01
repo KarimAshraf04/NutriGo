@@ -36,7 +36,7 @@ Offline: Kaggle Food-101 → notebooks/train_resnet50_11class_final.ipynb (ResNe
 |---|---|
 | `data/` | `food101_nutrition.csv` (101 dishes), `healthy_alternatives.csv` (50 swaps), `build_nutrition.py`; put Kaggle `fastfood.csv` here |
 | `notebooks/` | `eda_week2.ipynb` (EDA), `train_resnet50_11class_final.ipynb` (the shipped model, 91.8%), `train_resnet50_11class.ipynb` (earlier run, 92.0%), `train_food101.ipynb` (EfficientNetB0, all 101 classes) |
-| `backend/` | `flutter_api.py` (API for the app), `admin_dashboard.py` (admin web dashboard), recommender, predictor, `evaluate.py`, 40 unit tests — see `backend/README.md` |
+| `backend/` | `flutter_api.py` (API for the app), `admin_dashboard.py` (admin web dashboard), recommender, predictor, `evaluate.py`, 44 unit tests — see `backend/README.md` |
 | `for_mobile_app/` | **share this with the Flutter developer**: `NutriGo_API_for_Flutter.md` + `nutrigo_api.dart` |
 | `calorie_model/` | calorie-band classifier for fast-food items (not used by the API yet) |
 | `reports/` | EDA figures, `recommender_eval.csv` |
@@ -50,7 +50,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m pytest -q                             # 39 tests
+python -m pytest -q                             # 44 tests
 python evaluate.py                              # recommender numbers for slide 11
 $env:NUTRIGO_ADMIN_PASSWORD = "choose-a-password"
 python app.py                                   # http://localhost:5000 opens the admin dashboard

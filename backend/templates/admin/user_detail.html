@@ -9,7 +9,8 @@
   <div style="flex: 1; min-width: 220px;">
     <h1>{{ user.name }}</h1>
     <div class="muted">{{ user.email }}</div>
-    <div class="muted" style="font-size: 13px; margin-top: 4px;">Joined {{ user.created | datetime }} · last seen {{ user.last_seen | datetime }}</div>
+    <div class="muted" style="font-size: 13px; margin-top: 4px;">Joined {{ user.created | datetime }} · last seen {{ user.last_seen | datetime }} ·
+      signs in with {{ 'Google' if user.google_sub else 'email' }}{{ ' + password' if user.google_sub and user.password_hash }}</div>
   </div>
   <form method="post" action="{{ url_for('admin.delete_user', uid=user.id) }}"
         onsubmit='return confirm({{ ("Delete the account of " ~ user.name ~ ", with its meal plan and all photos? This cannot be undone.") | tojson }});'>

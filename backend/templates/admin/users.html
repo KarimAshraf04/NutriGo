@@ -65,7 +65,7 @@
         {% if u.has_avatar %}<img class="avatar" src="{{ url_for('admin.user_avatar', uid=u.id) }}" alt="">
         {% else %}<span class="avatar">{{ u.name[:1] | upper }}</span>{% endif %}
         <span class="meta"><div style="font-weight: 600; color: var(--brand);">{{ u.name }}</div>
-          <div class="muted" style="font-size: 12.5px;">{{ u.email }}</div></span></a></td>
+          <div class="muted" style="font-size: 12.5px;">{{ u.email }}{% if u.google_sub %} <span class="pill mute">Google</span>{% endif %}</div></span></a></td>
       <td>{{ (u.sex or '—') | capitalize }}{% if u.age %} · {{ '%.0f' % u.age }}{% endif %}</td>
       <td class="num">{{ '%.0f cm' % u.height_cm if u.height_cm else '—' }}</td>
       <td class="num">{{ '%.1f kg' % u.weight_kg if u.weight_kg else '—' }}</td>

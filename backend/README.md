@@ -25,7 +25,7 @@ python app.py
 - Flutter API: `http://localhost:5000/api/...` (phone on the same Wi-Fi: `http://<PC IP>:5000`)
 - Dashboard: `http://localhost:5000/admin` → log in with `NUTRIGO_ADMIN_PASSWORD`
   (if it is not set, a random password is made at each start and printed in the console)
-- Tests: `python -m pytest -q` → 37 passed, 2 skipped (the ONNX tests need `onnx`)
+- Tests: `python -m pytest -q` → 42 passed, 2 skipped (the ONNX tests need `onnx`)
 
 On Windows with App Control, start tools through `python -m ...` (pip, pytest) because the
 `.exe` launchers in `.venv\Scripts` can be blocked.
@@ -46,7 +46,9 @@ weight / height sent to `/api/target`.
 
 ## App accounts and the Users page
 
-People sign up in the app with name, email and password (`/api/auth/register`, `/api/auth/login`).
+People sign up in the app with name, email and password (`/api/auth/register`, `/api/auth/login`), or with
+their Google account (`/api/auth/google`: the app sends Google's ID token, the server checks it with Google
+and creates or links the account; set `NUTRIGO_GOOGLE_CLIENT_IDS`).
 Passwords are stored as salted hashes and login tokens only as SHA-256 hashes. After 10 wrong passwords
 in 15 minutes (per IP or per email) login answers `429`; the dashboard login has the same limit per IP. The profile holds sex,
 age, height, weight (every change is kept as history), activity, goal, a profile photo, and BMI and
@@ -105,6 +107,7 @@ blocked this file"), convert the model once on Google Colab with `convert_to_onn
 | Variable | Default |
 |---|---|
 | `NUTRIGO_ADMIN_PASSWORD` | random per start, printed in the console (set your own to keep it) |
+| `NUTRIGO_GOOGLE_CLIENT_IDS` | not set = Google sign-in off (`503`); the Google Cloud *Web* OAuth client id(s), comma-separated |
 | `NUTRIGO_SECRET_KEY` | random per start (admins are logged out on restart) |
 | `NUTRIGO_MODEL` | `auto` (Swin 101 dishes) — or `swin`, `onnx`, `keras`, `vit`, `none` |
 | `NUTRIGO_DB` | `backend/instance/nutrigo.db` |
