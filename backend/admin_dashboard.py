@@ -37,9 +37,10 @@ ENDPOINTS = {"predict": "Predict (photo)", "recommend_swaps": "Recommend", "list
              "create_plan": "Plan created", "get_plan": "Plan opened", "update_plan": "Plan target changed",
              "delete_plan": "Plan deleted", "plan_meal_swaps": "Plan meal swaps",
              "set_plan_meal": "Plan meal replaced", "plan_meal_photo": "Plan meal photo",
-             "register": "Sign up", "login": "Log in", "google_login": "Google sign-in", "logout": "Log out", "change_password": "Password changed", "me": "Profile opened",
+             "register": "Sign up", "login": "Log in", "google_login": "Google sign-in", "student_check": "Student ID checked", "student_login": "Student ID sign-in", "logout": "Log out", "change_password": "Password changed", "me": "Profile opened",
              "update_me": "Profile updated", "delete_me": "Account deleted", "set_avatar": "Profile photo",
-             "my_photos": "Gallery opened", "delete_my_photo": "Gallery photo deleted"}
+             "my_photos": "Gallery opened", "delete_my_photo": "Gallery photo deleted",
+             "my_meals": "Meal log opened", "add_my_meal": "Meal logged", "delete_my_meal": "Meal deleted"}
 
 
 def state():

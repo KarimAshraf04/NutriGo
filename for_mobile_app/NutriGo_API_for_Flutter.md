@@ -281,7 +281,14 @@ whether the token is genuine and made for our app, then logs the user in. The fi
 (name and email from Google); if an account with that email already exists (made with email + password), the
 Google sign-in is linked to it. It shows in the dashboard like any other sign-up / login, marked *Google*.
 
-**1. Google Cloud (once, by the project owner)** — https://console.cloud.google.com
+**With a Firebase project (what the app uses now)**: enable Google in Firebase → Authentication → Sign-in
+method, run `flutterfire configure`, and add the SHA-1 / SHA-256 in Firebase → Project settings → Android app.
+Firebase makes the OAuth clients for you: the **Web client id** is the `client_type: 3` entry in
+`android/app/google-services.json` (also in Authentication → Google → Web SDK configuration). Put it in
+`NUTRIGO_GOOGLE_CLIENT_IDS` on the server. The app may also sign in to Firebase Auth with the same Google
+credential; the server only needs the Google ID token.
+
+**1. Google Cloud (without Firebase)** — https://console.cloud.google.com
 1. Create a project (or pick one) → **APIs & Services → OAuth consent screen**: app name *NutriGo*,
    support email, *External*; add testers' Gmail addresses while it is in *Testing*.
 2. **Credentials → Create credentials → OAuth client ID**, three times:
@@ -316,6 +323,29 @@ Future<NutriGoUser> signInWithGoogle(NutriGoApi api) async {
 - Log out: `api.logout()` **and** `GoogleSignIn.instance.signOut()`, so the next sign-in shows the account picker.
 - `401` from `/api/auth/google` usually means the token was made for another client id: `serverClientId`
   must be the Web client id that is in `NUTRIGO_GOOGLE_CLIENT_IDS`.
+
+## Sign in with Student ID
+
+| Endpoint | What it does |
+|---|---|
+| `POST /api/auth/student/check` `{student_id}` | → `{"exists": true/false}`: ask for the password, or ask the user to create one |
+| `POST /api/auth/student` `{student_id, password, name?}` | first time: creates the account with that password (`201`); afterwards: signs in (`200`, `401` wrong password, `429` too many tries). Answers `{token, user, created}` |
+
+`student_id` is 3–20 letters, digits or `-`. The account's email is a placeholder
+(`<id>@student.nutrigo.local`); the user object has `student_id`. Like Google accounts it has no
+sex / age / height / weight yet (`daily_target` is null): show the details form, then `PATCH /api/me`.
+
+## Meal log (what the user really ate)
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/me/meals?since=YYYY-MM-DD` | the user's logged meals, newest first |
+| `POST /api/me/meals` `{date, time, slot, name, kcal, food_id?, saved_kcal?, swapped_from?, protein_g?, carbs_g?, fat_g?}` | log a meal → the meal (`201`). `date` / `time` are the phone's local `YYYY-MM-DD` / `HH:MM`; `slot` is `Breakfast · Lunch · Dinner · Snack` |
+| `DELETE /api/me/meals/<id>` | remove one |
+
+The home calorie ring, history and weekly chart come from these, so a new account starts at 0.
+The user object also has `goal_weight_kg` (send it in `PATCH /api/me` or at sign-up) and
+`start_weight_kg` (first weight on record) for the goal progress bar.
 
 ## Errors
 

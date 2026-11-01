@@ -181,7 +181,10 @@ class NutriGoUser {
         avatarUrl = j['avatar_url'] as String?,
         hasPlan = j['has_plan'] as bool? ?? false,
         google = j['google'] as bool? ?? false,
-        hasPassword = j['has_password'] as bool? ?? true;
+        hasPassword = j['has_password'] as bool? ?? true,
+        studentId = j['student_id'] as String?,
+        goalWeightKg = (j['goal_weight_kg'] as num?)?.toDouble(),
+        startWeightKg = (j['start_weight_kg'] as num?)?.toDouble();
 
   final String id, email, name;
   final String? sex, activity, goal, bmiLabel;
@@ -197,6 +200,12 @@ class NutriGoUser {
   /// Signs in with Google. Without a password (hasPassword false) changePassword('', newPassword)
   /// sets a first one, so the user can also log in with email + password.
   final bool google, hasPassword;
+
+  /// Set for accounts made with "Student ID".
+  final String? studentId;
+
+  /// The weight the user wants to reach, and their first recorded weight.
+  final double? goalWeightKg, startWeightKg;
 }
 
 class MealPhoto {
@@ -216,6 +225,28 @@ class MealPhoto {
   final int? day;
   final DateTime taken;
   final String url; // private: use api.authHeaders
+}
+
+/// A meal the user really ate (GET/POST /api/me/meals).
+class LoggedMealRecord {
+  LoggedMealRecord.fromJson(Map<String, dynamic> j)
+      : id = (j['id'] as num).toInt(),
+        date = j['date'] as String,
+        time = j['time'] as String,
+        slot = j['slot'] as String,
+        foodId = j['food_id'] as String?,
+        name = j['name'] as String,
+        kcal = (j['kcal'] as num).toInt(),
+        savedKcal = (j['saved_kcal'] as num?)?.toInt() ?? 0,
+        swappedFrom = j['swapped_from'] as String?;
+
+  final int id;
+  final String date; // YYYY-MM-DD (phone's local day)
+  final String time; // HH:MM
+  final String slot; // Breakfast | Lunch | Dinner | Snack
+  final String? foodId, swappedFrom;
+  final String name;
+  final int kcal, savedKcal;
 }
 
 // ---------- 7-day meal plan ----------
@@ -485,6 +516,69 @@ class NutriGoApi {
         .post(_u('/api/auth/google'), headers: _jsonHeaders, body: jsonEncode({'id_token': idToken}))
         .timeout(timeout);
     return _signedIn(_decode(res, ok: res.statusCode == 201 ? 201 : 200));
+  }
+
+  /// true when an account with this student id exists (then ask for its password),
+  /// false when it is new (then ask the user to create a password).
+  Future<bool> studentExists(String studentId) async {
+    final res = await _http
+        .post(_u('/api/auth/student/check'), headers: _jsonHeaders, body: jsonEncode({'student_id': studentId}))
+        .timeout(timeout);
+    return _decode(res)['exists'] as bool;
+  }
+
+  /// Student ID sign-in: the first time it creates the account with [password], afterwards it checks it.
+  Future<NutriGoUser> studentLogin(String studentId, String password, {String? name}) async {
+    final res = await _http
+        .post(_u('/api/auth/student'),
+            headers: _jsonHeaders,
+            body: jsonEncode({'student_id': studentId, 'password': password, if (name != null) 'name': name}))
+        .timeout(timeout);
+    return _signedIn(_decode(res, ok: res.statusCode == 201 ? 201 : 200));
+  }
+
+  // ---------- meal log ----------
+
+  /// Meals the user logged, newest first. [since] = 'YYYY-MM-DD'.
+  Future<List<LoggedMealRecord>> meals({String? since}) async {
+    final res = await _http
+        .get(_u('/api/me/meals', since == null ? null : {'since': since}), headers: _auth)
+        .timeout(timeout);
+    return (_decode(res)['meals'] as List)
+        .map((m) => LoggedMealRecord.fromJson(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<LoggedMealRecord> addMeal({
+    required String date,
+    required String time,
+    required String slot,
+    required String name,
+    required int kcal,
+    String? foodId,
+    int savedKcal = 0,
+    String? swappedFrom,
+    num? proteinG,
+    num? carbsG,
+    num? fatG,
+  }) async {
+    final res = await _http
+        .post(_u('/api/me/meals'),
+            headers: _jsonHeaders,
+            body: jsonEncode({
+              'date': date, 'time': time, 'slot': slot, 'name': name, 'kcal': kcal,
+              if (foodId != null) 'food_id': foodId, 'saved_kcal': savedKcal,
+              if (swappedFrom != null) 'swapped_from': swappedFrom,
+              if (proteinG != null) 'protein_g': proteinG,
+              if (carbsG != null) 'carbs_g': carbsG,
+              if (fatG != null) 'fat_g': fatG,
+            }))
+        .timeout(timeout);
+    return LoggedMealRecord.fromJson(_decode(res, ok: 201));
+  }
+
+  Future<void> deleteMeal(int id) async {
+    _decode(await _http.delete(_u('/api/me/meals/$id'), headers: _auth).timeout(timeout));
   }
 
   Future<void> logout() async {

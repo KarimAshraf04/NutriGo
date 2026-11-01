@@ -21,6 +21,11 @@
   POST   /api/auth/register   {name, email, password, sex?, age?, height_cm?, weight_kg?, activity?, goal?}
   POST   /api/auth/login      {email, password}             -> {token, user}
   POST   /api/auth/google     {id_token}  (from google_sign_in) -> {token, user}, 201 for a new account
+  POST   /api/auth/student/check {student_id}                  -> {exists}
+  POST   /api/auth/student       {student_id, password, name?} -> {token, user, created}
+         (first time: creates the account with that password; later: signs in with it)
+  GET    /api/me/meals ?since=YYYY-MM-DD  POST /api/me/meals {date, time, slot, name, kcal, ...}
+  DELETE /api/me/meals/<id>      -> what the user really ate (home ring, history)
   POST   /api/auth/logout
   GET    /api/me   PATCH /api/me {profile fields}   DELETE /api/me (account + plan + photos)
   POST   /api/me/password {current_password, new_password} -> new token (other devices logged out)
@@ -34,6 +39,7 @@ to the request log that the admin dashboard reads (no passwords, photos or profi
 """
 import io
 import os
+import re
 import time
 
 from flask import Blueprint, current_app, g, jsonify, request, send_file, url_for
@@ -599,6 +605,8 @@ def profile_json(user):
         "daily_target": target,
         "avatar_url": url_for("flutter_api.my_avatar", _external=True) if user["has_avatar"] else None,
         "google": bool(user["google_sub"]), "has_password": bool(user["password_hash"]),
+        "student_id": user.get("student_id"), "goal_weight_kg": user.get("goal_weight_kg"),
+        "start_weight_kg": next((w["weight_kg"] for w in state().users.weights(user["id"])), user["weight_kg"]),
         "has_plan": state().plans.get(user["id"])[0] is not None, "created": user["created"],
     }
 
@@ -612,7 +620,7 @@ def register():
     body = request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip().lower()
     password = str(body.get("password", ""))
-    if not users.EMAIL.match(email):
+    if not users.EMAIL.match(email) or email.endswith("@" + users.STUDENT_EMAIL_DOMAIN):
         return error("enter a valid 'email'")
     if len(password) < users.MIN_PASSWORD:
         return error(f"'password' must be at least {users.MIN_PASSWORD} characters")
@@ -795,3 +803,126 @@ def delete_my_photo(photo_id):
         return error("no such photo", 404)
     state().users.delete_photo(user["id"], photo_id)
     return jsonify({"deleted": photo_id})
+
+
+# ---------- Student ID ----------
+
+def parse_student_id(body):
+    sid = str(body.get("student_id", "")).strip()
+    if not users.STUDENT_ID.match(sid):
+        return None, error("'student_id' must be 3-20 letters, digits or '-'")
+    return sid, None
+
+
+@bp.post("/auth/student/check")
+def student_check():
+    sid, bad = parse_student_id(request.get_json(silent=True) or {})
+    if bad:
+        return bad
+    return jsonify({"student_id": sid, "exists": state().users.by_student_id(sid) is not None})
+
+
+@bp.post("/auth/student")
+def student_login():
+    """First time: creates the account with this password. Afterwards: signs in with it."""
+    body = request.get_json(silent=True) or {}
+    sid, bad = parse_student_id(body)
+    if bad:
+        return bad
+    password = str(body.get("password", ""))
+    store = state().users
+    user = store.by_student_id(sid)
+    if user is None:
+        if len(password) < users.MIN_PASSWORD:
+            return error(f"'password' must be at least {users.MIN_PASSWORD} characters")
+        profile, bad = parse_profile({k: v for k, v in body.items() if k != "name"})
+        if bad:
+            return bad
+        name = str(body.get("name") or "").strip()[:60] or f"Student {sid}"
+        email = f"{sid.lower()}@{users.STUDENT_EMAIL_DOMAIN}"
+        if store.by_email(email):
+            return error("this student id is already used", 409)
+        uid = store.create(email, name, password, profile, student_id=sid)
+        store.log_event(uid, "register")
+        resp, code = auth_json(uid, 201)
+        return jsonify(dict(resp.json, created=True)), code
+    keys = ("api-ip:" + str(request.remote_addr), "api-student:" + sid.lower())
+    wait = state().throttle.retry_after(*keys)
+    if wait:
+        resp = error(f"too many failed sign-ins; try again in {wait // 60 + 1} minutes", 429)
+        resp[0].headers["Retry-After"] = str(wait)
+        return resp
+    if not store.check_password(user, password):
+        state().throttle.fail(*keys)
+        return error("wrong student id or password", 401)
+    state().throttle.clear(keys[1])
+    store.log_event(user["id"], "login")
+    resp, code = auth_json(user["id"])
+    return jsonify(dict(resp.json, created=False)), code
+
+
+# ---------- meal log (what the user really ate) ----------
+
+DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+TIME = re.compile(r"^\d{2}:\d{2}$")
+
+
+def meal_json(m):
+    return {"id": m["id"], "date": m["date"], "time": m["time"], "slot": m["slot"], "food_id": m["food_id"],
+            "name": m["name"], "kcal": round(m["kcal"] or 0), "protein_g": m["protein_g"],
+            "carbs_g": m["carbs_g"], "fat_g": m["fat_g"], "saved_kcal": round(m["saved_kcal"] or 0),
+            "swapped_from": m["swapped_from"], "photo_id": m["photo_id"], "logged": m["ts"]}
+
+
+@bp.get("/me/meals")
+def my_meals():
+    user, bad = me_or_401()
+    if bad:
+        return bad
+    since = request.args.get("since")
+    if since and not DATE.match(since):
+        return error("'since' must be YYYY-MM-DD")
+    items = [meal_json(m) for m in state().users.meals(user["id"], since)]
+    return jsonify({"count": len(items), "meals": items})
+
+
+@bp.post("/me/meals")
+def add_my_meal():
+    user, bad = me_or_401()
+    if bad:
+        return bad
+    body = request.get_json(silent=True) or {}
+    date, at = str(body.get("date", "")), str(body.get("time", ""))
+    if not DATE.match(date) or not TIME.match(at):
+        return error("send 'date' as YYYY-MM-DD and 'time' as HH:MM (the phone's local time)")
+    slot = str(body.get("slot", "")).capitalize()
+    if slot not in users.MEAL_SLOTS:
+        return error(f"'slot' must be one of {list(users.MEAL_SLOTS)}")
+    name = str(body.get("name", "")).strip()[:100]
+    if not name:
+        return error("'name' is required")
+    try:
+        kcal = float(body.get("kcal"))
+        nums = {k: (float(body[k]) if body.get(k) is not None else None)
+                for k in ("protein_g", "carbs_g", "fat_g", "saved_kcal")}
+        photo_id = int(body["photo_id"]) if body.get("photo_id") is not None else None
+    except (TypeError, ValueError):
+        return error("'kcal', 'protein_g', 'carbs_g', 'fat_g', 'saved_kcal' and 'photo_id' must be numbers")
+    if not 0 <= kcal <= 5000:
+        return error("'kcal' must be 0-5000")
+    meal = state().users.add_meal(user["id"], {
+        "date": date, "time": at, "slot": slot, "name": name, "kcal": kcal,
+        "food_id": body.get("food_id"), "swapped_from": body.get("swapped_from"),
+        "photo_id": photo_id, **nums})
+    return jsonify(meal_json(meal)), 201
+
+
+@bp.delete("/me/meals/<int:meal_id>")
+def delete_my_meal(meal_id):
+    user, bad = me_or_401()
+    if bad:
+        return bad
+    if not state().users.meal(user["id"], meal_id):
+        return error("no such meal", 404)
+    state().users.delete_meal(user["id"], meal_id)
+    return jsonify({"deleted": meal_id})

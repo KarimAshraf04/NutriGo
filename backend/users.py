@@ -1,4 +1,4 @@
-"""App accounts: email + password or Google sign-in, profile, profile photo, meal-photo gallery, weight history.
+"""App accounts: email + password, Google or Student ID sign-in, profile, profile photo, meal-photo gallery, weight history.
 
 Passwords are stored as salted hashes (werkzeug scrypt/pbkdf2), never in plain text. Google accounts
 have no password (empty hash, so password login fails) until the user sets one. Login gives a
@@ -26,8 +26,11 @@ from werkzeug.security import check_password_hash, generate_password_hash
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,}$")
 MIN_PASSWORD = 8
 TOKEN_DAYS = 30
-PROFILE_FIELDS = ("name", "sex", "age", "height_cm", "weight_kg", "activity", "goal")
-LIMITS = {"age": (10, 100), "height_cm": (100, 250), "weight_kg": (25, 300)}
+PROFILE_FIELDS = ("name", "sex", "age", "height_cm", "weight_kg", "activity", "goal", "goal_weight_kg")
+LIMITS = {"age": (10, 100), "height_cm": (100, 250), "weight_kg": (25, 300), "goal_weight_kg": (25, 300)}
+STUDENT_ID = re.compile(r"^[A-Za-z0-9-]{3,20}$")
+STUDENT_EMAIL_DOMAIN = "student.nutrigo.local"  # placeholder email of Student ID accounts
+MEAL_SLOTS = ("Breakfast", "Lunch", "Dinner", "Snack")
 PHOTO_SIDE = 800
 GOOGLE_TOKENINFO = "https://oauth2.googleapis.com/tokeninfo"
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
@@ -94,10 +97,18 @@ class UserStore:
         # sign-up / sign-in / sign-out history for the dashboard (no IPs, no devices)
         self.execute("""CREATE TABLE IF NOT EXISTS user_events (
             id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, event TEXT)""")
-        # Google account id ("sub") of users who sign in with Google; added to older databases too
-        if "google_sub" not in {r["name"] for r in self.execute("PRAGMA table_info(users)")}:
-            self.execute("ALTER TABLE users ADD COLUMN google_sub TEXT")
+        # what the user really ate, logged from the app: the home ring, history and weekly chart
+        self.execute("""CREATE TABLE IF NOT EXISTS user_meals (
+            id INTEGER PRIMARY KEY, user_id TEXT, ts REAL, date TEXT, time TEXT, slot TEXT,
+            food_id TEXT, name TEXT, kcal REAL, protein_g REAL, carbs_g REAL, fat_g REAL,
+            saved_kcal REAL DEFAULT 0, swapped_from TEXT, photo_id INTEGER)""")
+        # Google account id ("sub"), Student ID and goal weight; added to older databases too
+        cols = {r["name"] for r in self.execute("PRAGMA table_info(users)")}
+        for col, kind in (("google_sub", "TEXT"), ("student_id", "TEXT"), ("goal_weight_kg", "REAL")):
+            if col not in cols:
+                self.execute(f"ALTER TABLE users ADD COLUMN {col} {kind}")
         self.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users (google_sub)")
+        self.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_student_id ON users (student_id)")
 
     def execute(self, sql, args=()):
         with contextlib.closing(sqlite3.connect(self.path)) as conn:
@@ -108,16 +119,17 @@ class UserStore:
 
     # ---------- accounts ----------
 
-    def create(self, email, name, password, profile, google_sub=None):
+    def create(self, email, name, password, profile, google_sub=None, student_id=None):
         """New account; password None for a Google-only account."""
         now = time.time()
         uid = secrets.token_hex(16)
         fields = {k: profile.get(k) for k in PROFILE_FIELDS if k != "name"}
         self.execute("INSERT INTO users (id, email, name, password_hash, sex, age, height_cm, weight_kg, activity, goal, "
-                     "created, last_seen, google_sub) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     "created, last_seen, google_sub, student_id, goal_weight_kg) "
+                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                      (uid, email.lower(), name, generate_password_hash(password) if password else "", fields["sex"],
                       fields["age"], fields["height_cm"], fields["weight_kg"], fields["activity"], fields["goal"],
-                      now, now, google_sub))
+                      now, now, google_sub, student_id.lower() if student_id else None, fields["goal_weight_kg"]))
         if fields["weight_kg"]:
             self.execute("INSERT INTO user_weights (user_id, ts, weight_kg) VALUES (?, ?, ?)",
                          (uid, now, fields["weight_kg"]))
@@ -129,6 +141,10 @@ class UserStore:
 
     def by_google(self, google_sub):
         rows = self.execute("SELECT * FROM users WHERE google_sub = ?", (google_sub,))
+        return dict(rows[0]) if rows else None
+
+    def by_student_id(self, student_id):
+        rows = self.execute("SELECT * FROM users WHERE student_id = ?", (student_id.strip().lower(),))
         return dict(rows[0]) if rows else None
 
     def link_google(self, uid, google_sub):
@@ -162,7 +178,7 @@ class UserStore:
         self.execute("INSERT INTO user_events (user_id, ts, event) VALUES (?, ?, ?)", (uid, time.time(), event))
 
     def delete(self, uid):
-        for table in ("user_tokens", "user_weights", "user_photos", "user_events"):
+        for table in ("user_tokens", "user_weights", "user_photos", "user_events", "user_meals"):
             self.execute(f"DELETE FROM {table} WHERE user_id = ?", (uid,))
         self.execute("DELETE FROM users WHERE id = ?", (uid,))
         shutil.rmtree(self.user_dir(uid), ignore_errors=True)
@@ -239,3 +255,31 @@ class UserStore:
     def weights(self, uid):
         return [dict(r) for r in self.execute(
             "SELECT ts, weight_kg FROM user_weights WHERE user_id = ? ORDER BY ts", (uid,))]
+
+    # ---------- meal log ----------
+
+    def add_meal(self, uid, meal):
+        cur = self.execute(
+            "INSERT INTO user_meals (user_id, ts, date, time, slot, food_id, name, kcal, protein_g, carbs_g, fat_g, "
+            "saved_kcal, swapped_from, photo_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            (uid, time.time(), meal["date"], meal["time"], meal["slot"], meal.get("food_id"), meal["name"],
+             meal["kcal"], meal.get("protein_g"), meal.get("carbs_g"), meal.get("fat_g"),
+             meal.get("saved_kcal") or 0, meal.get("swapped_from"), meal.get("photo_id")))
+        return self.meal(uid, cur[0]["id"])
+
+    def meal(self, uid, mid):
+        rows = self.execute("SELECT * FROM user_meals WHERE user_id = ? AND id = ?", (uid, mid))
+        return dict(rows[0]) if rows else None
+
+    def meals(self, uid, since_date=None, limit=500):
+        """Newest first; since_date 'YYYY-MM-DD' keeps that day and later."""
+        if since_date:
+            rows = self.execute("SELECT * FROM user_meals WHERE user_id = ? AND date >= ? "
+                                "ORDER BY date DESC, time DESC, id DESC LIMIT ?", (uid, since_date, limit))
+        else:
+            rows = self.execute("SELECT * FROM user_meals WHERE user_id = ? "
+                                "ORDER BY date DESC, time DESC, id DESC LIMIT ?", (uid, limit))
+        return [dict(r) for r in rows]
+
+    def delete_meal(self, uid, mid):
+        self.execute("DELETE FROM user_meals WHERE user_id = ? AND id = ?", (uid, mid))
